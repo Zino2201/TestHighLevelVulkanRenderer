@@ -22,7 +22,10 @@ struct BufferCreateInfo
 	MemoryUsage mem_usage;
 	BufferUsageFlags usage_flags;
 
-	BufferCreateInfo() : size(0), mem_usage(MemoryUsage::CpuOnly), usage_flags(BufferUsageFlags()) {}
+	BufferCreateInfo(uint64_t in_size = 0,
+		MemoryUsage in_mem_usage = MemoryUsage::CpuOnly,
+		BufferUsageFlags in_usage_flags = BufferUsageFlags())
+		: size(in_size), mem_usage(in_mem_usage), usage_flags(in_usage_flags) {}
 };
 	
 }

@@ -10,6 +10,21 @@
 #include "engine/gfx/VulkanBackend.hpp"
 #include "engine/gfx/BackendDevice.hpp"
 #include "engine/logger/Logger.hpp"
+#include <fstream>
+
+std::vector<char> read_binary_file(const std::string& in_name)
+{
+	std::ifstream file(in_name, std::ios::ate | std::ios::binary);
+
+	const size_t file_size = file.tellg();
+	
+	std::vector<char> buffer(file_size);
+	file.seekg(0);
+	file.read(buffer.data(), file_size);
+	file.close();
+
+	return buffer;
+}
 
 int main()
 {
@@ -48,7 +63,20 @@ int main()
 	auto swap = device.get_value()->create_swap_chain(gfx::SwapChainCreateInfo(win.get_native_handle(), 
 		1280, 
 		720));
-		
+
+	auto buffer = device.get_value()->create_buffer(gfx::BufferCreateInfo(4, 
+		gfx::MemoryUsage::CpuToGpu,
+		gfx::BufferUsageFlags(gfx::BufferUsageFlagBits::VertexBuffer)));
+
+	auto vert_spv = read_binary_file("vert.spv");
+	auto frag_spv = read_binary_file("frag.spv");
+	
+	auto vert = device.get_value()->create_shader(
+		gfx::ShaderCreateInfo({ (uint32_t*) vert_spv.data(), vert_spv.size() }));
+
+	auto frag = device.get_value()->create_shader(
+		gfx::ShaderCreateInfo({ (uint32_t*) frag_spv.data(), frag_spv.size() }));
+	
 	while(!glfwWindowShouldClose(win.get_handle()))
 	{
 		glfwPollEvents();

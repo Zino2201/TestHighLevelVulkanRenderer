@@ -86,20 +86,31 @@ class VulkanDevice final : public BackendDevice
 		robin_hood::unordered_map<void*, SurfaceWrapper> surfaces;
 	};
 public:
-	explicit VulkanDevice(VulkanBackend& in_backend, vkb::Device&& in_device) :
-		backend(in_backend),
-		device_wrapper(DeviceWrapper(std::move(in_device))),
-		surface_manager(*this) {}
+	explicit VulkanDevice(VulkanBackend& in_backend, vkb::Device&& in_device);
 	~VulkanDevice() override;
-	
+
+	cb::Result<BackendDeviceResource, Result> create_buffer(const BufferCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_swap_chain(const SwapChainCreateInfo& in_create_info) override;
+	cb::Result<BackendDeviceResource, Result> create_shader(const ShaderCreateInfo& in_create_info) override;
+	cb::Result<BackendDeviceResource, Result> create_gfx_pipeline(const GfxPipelineCreateInfo& in_create_info) override;
+	cb::Result<BackendDeviceResource, Result> create_render_pass(const RenderPassCreateInfo& in_create_info) override;
+	
+	void destroy_buffer(const BackendDeviceResource& in_buffer) override;
 	void destroy_swap_chain(const BackendDeviceResource& in_swap_chain) override;
+	void destroy_shader(const BackendDeviceResource& in_shader) override;
+	void destroy_gfx_pipeline(const BackendDeviceResource& in_shader) override;
+	void destroy_render_pass(const BackendDeviceResource& in_shader) override;
+
+	cb::Result<void*, Result> map_buffer(const BackendDeviceResource& in_buffer) override;
+	void unmap_buffer(const BackendDeviceResource& in_buffer) override;
 
 	[[nodiscard]] VulkanBackend& get_backend() const { return backend; }
 	[[nodiscard]] VkDevice get_device() const { return device_wrapper.device.device; }
 	[[nodiscard]] VkPhysicalDevice get_physical_device() const { return device_wrapper.device.physical_device.physical_device; }
+	[[nodiscard]] VmaAllocator get_allocator() const { return allocator; }
 private:
 	VulkanBackend& backend;
+	VmaAllocator allocator;
 	DeviceWrapper device_wrapper;
 	SurfaceManager surface_manager;
 };

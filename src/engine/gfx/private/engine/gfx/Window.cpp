@@ -5,6 +5,10 @@
 #endif
 #include <GLFW/glfw3native.h>
 
+#include "engine/gfx/Pipeline.hpp"
+#include "engine/gfx/GfxPipeline.hpp"
+#include "engine/gfx/RenderPass.hpp"
+
 namespace cb
 {
 

@@ -1,0 +1,5 @@
+set(VMA_DYNAMIC_VULKAN_FUNCTIONS OFF CACHE INTERNAL "" FORCE)
+FetchContent_Declare(VulkanMemoryAllocator
+	GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+	GIT_TAG 5c52b859046043b0d47c3a7bfd2d45f54385d219)
+FetchContent_MakeAvailable(VulkanMemoryAllocator)

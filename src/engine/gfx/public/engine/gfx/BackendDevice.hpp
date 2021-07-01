@@ -4,7 +4,11 @@
 #include "engine/Result.hpp"
 #include "DeviceResource.hpp"
 #include "Result.hpp"
+#include "Buffer.hpp"
 #include "SwapChain.hpp"
+#include "Shader.hpp"
+#include "RenderPass.hpp"
+#include "GfxPipeline.hpp"
 
 namespace cb::gfx
 {
@@ -27,8 +31,20 @@ public:
 	void operator=(const BackendDevice&) = delete;
 	BackendDevice& operator=(BackendDevice&&) noexcept = default;
 
-	virtual cb::Result<BackendDeviceResource, Result> create_swap_chain(const SwapChainCreateInfo& in_create_info) = 0;
+	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_buffer(const BufferCreateInfo& in_create_info) = 0;
+	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_swap_chain(const SwapChainCreateInfo& in_create_info) = 0;
+	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_shader(const ShaderCreateInfo& in_create_info) = 0;
+	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_gfx_pipeline(const GfxPipelineCreateInfo& in_create_info) = 0;
+	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_render_pass(const RenderPassCreateInfo& in_create_info) = 0;
+	virtual void destroy_buffer(const BackendDeviceResource& in_swap_chain) = 0;
 	virtual void destroy_swap_chain(const BackendDeviceResource& in_swap_chain) = 0;
+	virtual void destroy_shader(const BackendDeviceResource& in_shader) = 0;
+	virtual void destroy_gfx_pipeline(const BackendDeviceResource& in_shader) = 0;
+	virtual void destroy_render_pass(const BackendDeviceResource& in_shader) = 0;
+
+	/** Buffer */
+	[[nodiscard]] virtual cb::Result<void*, Result> map_buffer(const BackendDeviceResource& in_buffer) = 0;
+	virtual void unmap_buffer(const BackendDeviceResource& in_buffer) = 0;
 };
 	
 }

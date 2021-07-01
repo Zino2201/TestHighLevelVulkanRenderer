@@ -18,8 +18,6 @@ public:
 	VkResult create(const uint32_t in_width, 
 		const uint32_t in_height);
 private:
-
-private:
 	VulkanDevice& device;
 	vkb::Swapchain swapchain;
 	VkSurfaceKHR surface;
