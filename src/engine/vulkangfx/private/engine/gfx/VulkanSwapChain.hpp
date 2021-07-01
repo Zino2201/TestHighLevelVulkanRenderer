@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/gfx/Vulkan.hpp"
 #include "engine/gfx/SwapChain.hpp"
 
 namespace cb::gfx

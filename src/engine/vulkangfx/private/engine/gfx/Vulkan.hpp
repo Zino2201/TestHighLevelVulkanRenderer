@@ -1,16 +1,21 @@
 #pragma once
 
+#include "engine/Core.hpp"
+
 #if CB_PLATFORM(WINDOWS)
 #define VK_USE_PLATFORM_WIN32_KHR
+#define NOMINMAX
 #endif
 #include <vulkan/vulkan.h>
 #include "VkBootstrap.h"
+#include "engine/gfx/DeviceResource.hpp"
+#include "engine/gfx/Result.hpp"
 
 namespace cb::gfx
 {
 
 /** Debug counter used to track undeleted resources */
-size_t alive_vulkan_objects = 0;
+inline static size_t alive_vulkan_objects = 0;
 
 template<typename T>
 struct VulkanResourcePtr

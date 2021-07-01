@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 project(CityBuilder CXX)
 
 # I AM SPEED
-set(CMAKE_UNITY_BUILD ON)
+set(CMAKE_UNITY_BUILD OFF)
 
 # Remove exceptions (enabled by default by CMake)
 string(REGEX REPLACE "/EHsc" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
@@ -18,7 +18,7 @@ option(CB_MONOLITHIC "Monolithic mode (statc libs)" OFF)
 
 message(STATUS "With Vulkan: ${CB_WITH_VULKAN}")
 
-function(cb_add_module TARGET)
+macro(cb_add_module TARGET)
     if(CB_MONOLITHIC)
         add_library(${TARGET} STATIC ${ARGN})
     else()
@@ -30,6 +30,6 @@ function(cb_add_module TARGET)
         LIBRARY_OUTPUT_DIRECTORY "${CB_BINS_DIR}"
         RUNTIME_OUTPUT_DIRECTORY "${CB_BINS_DIR}"
         PREFIX "${CB_MODULE_PREFIX}")
-endfunction()
+endmacro()
 
 add_subdirectory(src)
