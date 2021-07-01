@@ -1,0 +1,5 @@
+A*
+
+Sebastian Lague
+Hierarchial Path Finding
+https://webdocs.cs.ualberta.ca/~mmueller/ps/hpastar.pdf

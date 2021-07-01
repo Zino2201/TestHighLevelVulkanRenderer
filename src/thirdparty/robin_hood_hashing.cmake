@@ -1,0 +1,4 @@
+FetchContent_Declare(robin_hood_hashing
+	GIT_REPOSITORY https://github.com/martinus/robin-hood-hashing.git
+	GIT_TAG f2cae2e6b8231c46fe9c324e31b0a1f64e0de8c6)
+FetchContent_MakeAvailable(robin_hood_hashing)
