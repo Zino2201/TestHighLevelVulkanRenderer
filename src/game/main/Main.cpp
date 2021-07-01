@@ -37,7 +37,7 @@ int main()
 		spdlog::critical("Failed to create backend: {}", result.get_error());
 		return -1;
 	}
-
+	
 	auto device = result.get_value()->create_device(gfx::ShaderModel::SM6_0);
 	if(!device)
 	{

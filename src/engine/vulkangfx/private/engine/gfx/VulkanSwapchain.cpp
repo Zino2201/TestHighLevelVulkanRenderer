@@ -1,4 +1,5 @@
 #include "engine/gfx/VulkanSwapChain.hpp"
+#include "engine/gfx/VulkanDevice.hpp"
 
 namespace cb::gfx
 {
