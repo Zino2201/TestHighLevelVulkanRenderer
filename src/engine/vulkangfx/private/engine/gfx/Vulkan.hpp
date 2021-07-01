@@ -9,9 +9,9 @@
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
 #include "VkBootstrap.h"
+#include "engine/gfx/Memory.hpp"
 #include "engine/gfx/DeviceResource.hpp"
 #include "engine/gfx/Result.hpp"
-#include "engine/gfx/Memory.hpp"
 
 namespace cb::gfx
 {
