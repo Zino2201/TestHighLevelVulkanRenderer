@@ -298,7 +298,7 @@ struct PipelineColorBlendAttachmentState
 		const BlendFactor in_src_alpha_blend_factor = BlendFactor::One,
 		const BlendFactor in_dst_alpha_blend_factor = BlendFactor::Zero,
 		const BlendOp in_alpha_blend_op = BlendOp::Add,
-		const ColorComponentFlags in_color_write_flags = ColorComponentFlagBits::RGBA) :
+		const ColorComponentFlags in_color_write_flags = ColorComponentFlags(ColorComponentFlagBits::RGBA)) :
 		enable_blend(in_enable_blend), src_color_blend_factor(in_src_color_blend_factor),
 		dst_color_blend_factor(in_dst_color_blend_factor), color_blend_op(in_color_blend_op),
 		src_alpha_blend_factor(in_src_alpha_blend_factor), dst_alpha_blend_factor(in_dst_alpha_blend_factor),
@@ -341,19 +341,19 @@ struct PipelineColorBlendStateCreationInfo
 {
 	bool enable_logic_op;
 	LogicOp logic_op;
-	std::array<PipelineColorBlendAttachmentState, max_attachments_per_framebuffer> attachment_states;
+	std::span<PipelineColorBlendAttachmentState> attachments;
 
 	PipelineColorBlendStateCreationInfo(const bool in_enable_logic_op = false,
 		LogicOp in_logic_op = LogicOp::NoOp,
-		const std::array<PipelineColorBlendAttachmentState, max_attachments_per_framebuffer>& in_attachment_states = {})
+		const std::span<PipelineColorBlendAttachmentState>& in_attachment_states = {})
 		: enable_logic_op(in_enable_logic_op), logic_op(in_logic_op),
-		attachment_states(in_attachment_states) {}
+		attachments(in_attachment_states) {}
 
 	bool operator==(const PipelineColorBlendStateCreationInfo& in_other) const
 	{
 		return enable_logic_op == in_other.enable_logic_op &&
 			logic_op == in_other.logic_op &&
-			attachment_states == in_other.attachment_states;
+			attachments.data() == in_other.attachments.data();
 	}
 };
 

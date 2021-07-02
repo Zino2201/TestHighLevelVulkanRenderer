@@ -12,6 +12,8 @@
 #include "engine/gfx/Memory.hpp"
 #include "engine/gfx/DeviceResource.hpp"
 #include "engine/gfx/Result.hpp"
+#include "engine/gfx/Shader.hpp"
+#include "engine/gfx/Format.hpp"
 
 namespace cb::gfx
 {
@@ -100,5 +102,74 @@ inline VmaMemoryUsage convert_memory_usage(MemoryUsage in_mem_usage)
 		return VMA_MEMORY_USAGE_GPU_ONLY;
 	}
 }
+
+inline VkFormat convert_format(const Format& in_format)
+{
+	switch(in_format)
+	{
+	default:
+	case Format::Undefined:
+		return VK_FORMAT_UNDEFINED;
+
+	/** Depth & stencil */
+	case Format::D32Sfloat:
+		return VK_FORMAT_D32_SFLOAT;
+	case Format::D32SfloatS8Uint:
+		return VK_FORMAT_D32_SFLOAT_S8_UINT;
+	case Format::D24UnormS8Uint:
+		return VK_FORMAT_D24_UNORM_S8_UINT;
+
+	/** RGBA */
+	case Format::R8Unorm:
+		return VK_FORMAT_R8_UNORM;
+	case Format::R8G8B8Unorm:
+		return VK_FORMAT_R8G8B8_UNORM;
+	case Format::R8G8B8A8Unorm:
+		return VK_FORMAT_R8G8B8A8_UNORM;
+	case Format::R8G8B8A8Srgb:
+		return VK_FORMAT_R8G8B8A8_SRGB;
+	case Format::B8G8R8A8Unorm:
+		return VK_FORMAT_B8G8R8A8_UNORM;
+	case Format::R16G16B16A16Sfloat:
+		return VK_FORMAT_R16G16B16A16_SFLOAT;
+	case Format::R32G32Sfloat:
+		return VK_FORMAT_R32G32_SFLOAT;
+	case Format::R32G32B32Sfloat:
+		return VK_FORMAT_R32G32B32_SFLOAT;
+	case Format::R32G32B32A32Sfloat:
+		return VK_FORMAT_R32G32B32A32_SFLOAT;
+
+	/** Block */
+	case Format::Bc1RgbUnormBlock:
+		return VK_FORMAT_BC1_RGB_UNORM_BLOCK;
+	case Format::Bc1RgbaUnormBlock:
+		return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+	case Format::Bc1RgbSrgbBlock:
+		return VK_FORMAT_BC1_RGB_SRGB_BLOCK;
+	case Format::Bc1RgbaSrgbBlock:
+		return VK_FORMAT_BC1_RGBA_SRGB_BLOCK;
+
+	case Format::Bc3UnormBlock:
+		return VK_FORMAT_BC3_UNORM_BLOCK;
+	case Format::Bc3SrgbBlock:
+		return VK_FORMAT_BC3_SRGB_BLOCK;
+		
+	case Format::Bc5UnormBlock:
+		return VK_FORMAT_BC5_UNORM_BLOCK;
+	case Format::Bc5SnormBlock:
+		return VK_FORMAT_BC5_SNORM_BLOCK;
+		
+	case Format::Bc6HUfloatBlock:
+		return VK_FORMAT_BC6H_UFLOAT_BLOCK;
+	case Format::Bc6HSfloatBlock:
+		return VK_FORMAT_BC6H_SFLOAT_BLOCK;
+
+	case Format::Bc7UnormBlock:
+		return VK_FORMAT_BC7_UNORM_BLOCK;
+	case Format::Bc7SrgbBlock:
+		return VK_FORMAT_BC7_SRGB_BLOCK;
+	}
+}
+
 
 }

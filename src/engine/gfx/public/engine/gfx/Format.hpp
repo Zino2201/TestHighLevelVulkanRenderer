@@ -30,7 +30,7 @@ enum class Format
     /** RGB 8-bit (srgb nonlinear) */
     R8G8B8A8Srgb,
 
-    /** BGR 8-bit (unsigned short) */
+    /** BGRA 8-bit (unsigned short) */
     B8G8R8A8Unorm,
 
     /** RGBA 16-bit (signed float) */

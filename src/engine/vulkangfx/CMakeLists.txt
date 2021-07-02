@@ -7,6 +7,9 @@ cb_add_module(vulkangfx
 	private/engine/gfx/VulkanSwapChain.hpp
 	private/engine/gfx/VulkanShader.hpp
 	private/engine/gfx/VulkanBuffer.hpp
+	private/engine/gfx/VulkanPipeline.hpp
+	private/engine/gfx/VulkanTexture.hpp
+	private/engine/gfx/VulkanPipelineLayout.hpp
 	private/engine/gfx/VulkanDevice.cpp
 	private/engine/gfx/VulkanBackend.cpp
 	private/engine/gfx/VulkanBuffer.cpp
