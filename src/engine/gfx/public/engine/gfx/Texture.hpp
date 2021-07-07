@@ -139,7 +139,7 @@ struct TextureCreateInfo
 
 struct TextureViewCreateInfo
 {
-	DeviceResource texture;
+	BackendDeviceResource texture;
 	TextureViewType type;
 	Format format;
 	TextureSubresourceRange subresource_range;
@@ -147,7 +147,7 @@ struct TextureViewCreateInfo
 	TextureViewCreateInfo() : type(TextureViewType::Tex1D),
 		format(Format::Undefined) {}
 
-	TextureViewCreateInfo(const DeviceResource& in_texture,
+	TextureViewCreateInfo(const BackendDeviceResource& in_texture,
 		TextureViewType in_type, Format in_format, const TextureSubresourceRange& in_subresource_range) :
 		texture(in_texture), type(in_type), format(in_format), subresource_range(in_subresource_range) {}
 };

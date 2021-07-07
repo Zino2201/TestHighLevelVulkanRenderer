@@ -16,11 +16,11 @@ class SimplePool
 	{
 		void operator()(T* in_ptr)
 		{
-			free(in_ptr);
+			::free(in_ptr);
 		}
 	};
 	
-	using ChunkType = std::vector<std::unique_ptr<T>, ChunkDeleter>;
+	using ChunkType = std::unique_ptr<T[], ChunkDeleter>;
 
 public:
 	template<typename... Args>
@@ -29,12 +29,12 @@ public:
 		if constexpr(ThreadSafe)
 			std::lock_guard<std::mutex> guard(mutex);
 		
-		if(free.empty())
+		if(free_memory.empty())
 		{
 			const size_t obj_count = chunks.size() + ChunkSize;
 
 			/** TODO: Aligned malloc? */
-			ChunkType head = malloc(obj_count * sizeof(T));
+			ChunkType head(static_cast<T*>(malloc(obj_count * sizeof(T))));
 			if(!head)
 				return nullptr;
 

@@ -17,6 +17,7 @@ option(CB_WITH_VULKAN "Build with Vulkan support (requires Vulkan SDK)" ON)
 option(CB_MONOLITHIC "Monolithic mode (statc libs)" OFF)
 
 message(STATUS "With Vulkan: ${CB_WITH_VULKAN}")
+message(STATUS "Monolithic: ${CB_MONOLITHIC}")
 
 macro(cb_add_module TARGET)
     if(CB_MONOLITHIC)

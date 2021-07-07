@@ -2,6 +2,7 @@ cb_add_module(core
 	public/engine/Core.hpp
 	public/engine/Flags.hpp
 	public/engine/PlatformMacros.hpp
+	public/engine/Hash.hpp
 	public/engine/Result.hpp
 	public/engine/debug/Assertions.hpp
 	public/engine/logger/Logger.hpp
@@ -21,4 +22,4 @@ else()
 	target_compile_definitions(core PUBLIC CB_MONOLITHIC=0)
 endif()
 target_compile_definitions(core PUBLIC "$<$<CONFIG:Debug>:CB_BUILD_PRIVATE_DEFINITION_DEBUG=1>$<$<CONFIG:RelWithDebInfo>:CB_BUILD_PRIVATE_DEFINITION_RELWITHDEBINFO=1>$<$<CONFIG:Release>:CB_BUILD_PRIVATE_DEFINITION_RELEASE=1>")
-target_link_libraries(core PUBLIC spdlog)
+target_link_libraries(core PUBLIC spdlog robin_hood::robin_hood)

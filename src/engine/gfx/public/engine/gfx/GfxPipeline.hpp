@@ -3,6 +3,7 @@
 #include "Pipeline.hpp"
 #include "Format.hpp"
 #include "Texture.hpp"
+#include <span>
 
 namespace cb::gfx
 {
@@ -337,19 +338,19 @@ enum class LogicOp
 	Set
 };
 
-struct PipelineColorBlendStateCreationInfo
+struct PipelineColorBlendStateCreateInfo
 {
 	bool enable_logic_op;
 	LogicOp logic_op;
 	std::span<PipelineColorBlendAttachmentState> attachments;
 
-	PipelineColorBlendStateCreationInfo(const bool in_enable_logic_op = false,
+	PipelineColorBlendStateCreateInfo(const bool in_enable_logic_op = false,
 		LogicOp in_logic_op = LogicOp::NoOp,
 		const std::span<PipelineColorBlendAttachmentState>& in_attachment_states = {})
 		: enable_logic_op(in_enable_logic_op), logic_op(in_logic_op),
 		attachments(in_attachment_states) {}
 
-	bool operator==(const PipelineColorBlendStateCreationInfo& in_other) const
+	bool operator==(const PipelineColorBlendStateCreateInfo& in_other) const
 	{
 		return enable_logic_op == in_other.enable_logic_op &&
 			logic_op == in_other.logic_op &&
@@ -389,7 +390,7 @@ struct GfxPipelineCreateInfo
 	PipelineRasterizationStateCreateInfo rasterization_state;
 	PipelineMultisamplingStateCreateInfo multisampling_state;
 	PipelineDepthStencilStateCreateInfo depth_stencil_state;
-	PipelineColorBlendStateCreationInfo color_blend_state;
+	PipelineColorBlendStateCreateInfo color_blend_state;
 	BackendDeviceResource pipeline_layout;
 	BackendDeviceResource render_pass;
 
@@ -402,7 +403,7 @@ struct GfxPipelineCreateInfo
 		const PipelineRasterizationStateCreateInfo& in_rasterization_state = PipelineRasterizationStateCreateInfo(),
 		const PipelineMultisamplingStateCreateInfo& in_multisampling_state = PipelineMultisamplingStateCreateInfo(),
 		const PipelineDepthStencilStateCreateInfo& in_depth_stencil_state = PipelineDepthStencilStateCreateInfo(),
-		const PipelineColorBlendStateCreationInfo& in_color_blend_state = PipelineColorBlendStateCreationInfo(),
+		const PipelineColorBlendStateCreateInfo& in_color_blend_state = PipelineColorBlendStateCreateInfo(),
 		const BackendDeviceResource& in_pipeline_layout = BackendDeviceResource(),
 		const BackendDeviceResource& in_render_pass = BackendDeviceResource(),
 		const uint32_t& in_subpass = 0) :

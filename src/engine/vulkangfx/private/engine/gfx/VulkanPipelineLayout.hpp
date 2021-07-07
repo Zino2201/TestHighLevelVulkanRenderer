@@ -17,6 +17,9 @@ public:
 	{
 		vkDestroyPipelineLayout(device.get_device(), pipeline_layout, nullptr);	
 	}
+
+	[[nodiscard]] VulkanDevice& get_device() const { return device; }
+	[[nodiscard]] VkPipelineLayout get_pipeline_layout() const { return pipeline_layout; }
 private:
 	VulkanDevice& device;
 	VkPipelineLayout pipeline_layout;

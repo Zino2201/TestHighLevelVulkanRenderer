@@ -5,15 +5,76 @@
 #include "VulkanPipeline.hpp"
 #include "VulkanTexture.hpp"
 #include "VulkanPipelineLayout.hpp"
+#include "VulkanRenderPass.hpp"
+#include "VulkanCommandPool.hpp"
+#include "VulkanCommandList.hpp"
+#include "VulkanTextureView.hpp"
+#include "VulkanSync.hpp"
 
 namespace cb::gfx
 {
 
+/** FramebufferManager */
+void VulkanDevice::FramebufferManager::new_frame()
+{
+	std::vector<Framebuffer> expired_framebuffers;
+	for(auto& it : framebuffers)
+	{
+		it.second.unpolled_frames++;
+		if(it.second.unpolled_frames == framebuffer_expiration_frames)
+			expired_framebuffers.push_back(it.first);
+	}
+
+	for(const auto& framebuffer : expired_framebuffers)
+		framebuffers.erase(framebuffer);
+	}
+
+VkFramebuffer VulkanDevice::FramebufferManager::get_or_create(VkRenderPass in_render_pass, const Framebuffer& in_framebuffer)
+{
+	auto it = framebuffers.find(in_framebuffer);
+	if(it != framebuffers.end())
+	{
+		it->second.unpolled_frames = 0;
+		return it->second.framebuffer;
+	}
+	
+	VkFramebufferCreateInfo create_info = {};
+	create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+	create_info.pNext = nullptr;
+	create_info.flags = 0;
+	create_info.renderPass = in_render_pass;
+	create_info.attachmentCount = static_cast<uint32_t>(in_framebuffer.attachments.size());
+	create_info.width = in_framebuffer.width;
+	create_info.height = in_framebuffer.height;
+	create_info.layers = 1;
+
+	std::vector<VkImageView> views;
+	views.reserve(in_framebuffer.attachments.size());
+
+	for(const auto& attachment : in_framebuffer.attachments)
+	{
+		views.emplace_back(get_resource<VulkanTextureView>(attachment)->get_image_view());
+	}
+
+	create_info.attachmentCount = static_cast<uint32_t>(views.size());
+	create_info.pAttachments = views.data();
+
+	VkFramebuffer framebuffer;
+	vkCreateFramebuffer(device.get_device(),
+		&create_info,
+		nullptr,
+		&framebuffer);
+	framebuffers.insert({ in_framebuffer, std::move(Entry(device, framebuffer)) });
+	
+	return framebuffer;
+}
+
 VulkanDevice::VulkanDevice(VulkanBackend& in_backend, vkb::Device&& in_device) :
 	backend(in_backend),
+	allocator(nullptr),
 	device_wrapper(DeviceWrapper(std::move(in_device))),
 	surface_manager(*this),
-	allocator(nullptr)
+	framebuffer_manager(*this)
 {
 	VmaAllocatorCreateInfo create_info = {};
 	create_info.instance = backend.get_instance();
@@ -26,11 +87,14 @@ VulkanDevice::VulkanDevice(VulkanBackend& in_backend, vkb::Device&& in_device) :
 	
 VulkanDevice::~VulkanDevice() = default;
 
+void VulkanDevice::new_frame()
+{
+	framebuffer_manager.new_frame();	
+}
+
 cb::Result<BackendDeviceResource, Result> VulkanDevice::create_buffer(const BufferCreateInfo& in_create_info)
 {
 	CB_CHECK(in_create_info.size != 0 && in_create_info.usage_flags != BufferUsageFlags())
-	if(in_create_info.size == 0 || in_create_info.usage_flags == BufferUsageFlags())
-		return make_error(Result::ErrorInvalidParameter);
 
 	VkBufferCreateInfo buffer_create_info = {};
 	buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -78,8 +142,6 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_buffer(const Buff
 cb::Result<BackendDeviceResource, Result> VulkanDevice::create_swap_chain(const SwapChainCreateInfo& in_create_info)
 {
 	CB_CHECK(in_create_info.os_handle && in_create_info.width != 0 && in_create_info.height != 0);
-	if(!in_create_info.os_handle || in_create_info.width == 0 || in_create_info.height == 0)
-		return make_error(Result::ErrorInvalidParameter);
 
 	auto surface = surface_manager.get_or_create(in_create_info.os_handle);
 	if(!surface)
@@ -101,8 +163,6 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_swap_chain(const 
 cb::Result<BackendDeviceResource, Result> VulkanDevice::create_shader(const ShaderCreateInfo& in_create_info)
 {
 	CB_CHECK(!in_create_info.bytecode.empty());
-	if(in_create_info.bytecode.empty())
-		return make_error(Result::ErrorInvalidParameter);
 
 	VkShaderModuleCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -194,7 +254,8 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_gfx_pipeline(cons
 	rasterization_state.depthBiasConstantFactor = in_create_info.rasterization_state.depth_bias_constant_factor;
 	rasterization_state.depthBiasClamp = in_create_info.rasterization_state.depth_bias_clamp;
 	rasterization_state.depthBiasSlopeFactor = in_create_info.rasterization_state.depth_bias_slope_factor;
-
+	rasterization_state.lineWidth = 1.f;
+	
 	VkPipelineMultisampleStateCreateInfo multisampling_state = {};
 	multisampling_state.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 	multisampling_state.pNext = nullptr;
@@ -247,20 +308,37 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_gfx_pipeline(cons
 	dynamic_state_create_info.pNext = nullptr;
 	dynamic_state_create_info.dynamicStateCount = static_cast<uint32_t>(dynamic_states.size());
 	dynamic_state_create_info.pDynamicStates = dynamic_states.data();
+
+	VkPipelineViewportStateCreateInfo viewport_state = {};
+	viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewport_state.pNext = nullptr;
+	viewport_state.flags = 0;
+
+	VkViewport viewport = {};
+	VkRect2D scissor = {};
+
+	viewport_state.viewportCount = 1;
+	viewport_state.pViewports = &viewport;
+	viewport_state.scissorCount = 1;
+	viewport_state.pScissors = &scissor;
 	
 	create_info.stageCount = static_cast<uint32_t>(shader_stages.size());
 	create_info.pStages = shader_stages.data();
 	create_info.pVertexInputState = &vertex_input_state;
 	create_info.pInputAssemblyState = &input_assembly_state;
 	create_info.pTessellationState = nullptr;
-	create_info.pViewportState = nullptr;
+	create_info.pViewportState = &viewport_state;
 	create_info.pRasterizationState = &rasterization_state;
 	create_info.pMultisampleState = &multisampling_state;
 	create_info.pDepthStencilState = &depth_stencil_state;
 	create_info.pColorBlendState = &color_blend_state;
 	create_info.pDynamicState = &dynamic_state_create_info;
+	create_info.layout = get_resource<VulkanPipelineLayout>(in_create_info.pipeline_layout)->get_pipeline_layout();
+	create_info.renderPass = get_resource<VulkanRenderPass>(in_create_info.render_pass)->get_render_pass();
 	create_info.subpass = in_create_info.subpass;
-
+	create_info.basePipelineHandle = VK_NULL_HANDLE;
+	create_info.basePipelineIndex = -1;
+	
 	VkPipeline pipeline;
 	VkResult result = vkCreateGraphicsPipelines(get_device(),
 		VK_NULL_HANDLE,
@@ -277,7 +355,316 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_gfx_pipeline(cons
 	
 cb::Result<BackendDeviceResource, Result> VulkanDevice::create_render_pass(const RenderPassCreateInfo& in_create_info)
 {
+	VkRenderPassCreateInfo create_info = {};
+	create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+	create_info.pNext = nullptr;
+	create_info.flags = 0;
+
+	std::vector<VkAttachmentDescription> attachments;
+	attachments.reserve(in_create_info.attachments.size());
+	for(const auto& attachment : in_create_info.attachments)
+	{
+		VkAttachmentDescription desc = {};
+		desc.format = convert_format(attachment.format);
+		desc.samples = convert_sample_count_bit(attachment.samples);
+		desc.loadOp = convert_load_op(attachment.load_op);
+		desc.storeOp = convert_store_op(attachment.store_op);
+		desc.stencilLoadOp = convert_load_op(attachment.stencil_load_op);
+		desc.stencilStoreOp = convert_store_op(attachment.stencil_store_op);
+		desc.initialLayout = convert_texture_layout(attachment.initial_layout);
+		desc.finalLayout = convert_texture_layout(attachment.final_layout);
+		attachments.push_back(desc);
+	}
+
+	create_info.attachmentCount = static_cast<uint32_t>(attachments.size());
+	create_info.pAttachments = attachments.data();
+
+	/**
+	 * Struct to keep attachments descriptions alive
+	 */
+	struct Subpass
+	{
+		std::vector<VkAttachmentReference> input_attachments;
+		std::vector<VkAttachmentReference> color_attachments;
+		std::vector<VkAttachmentReference> resolve_attachments;
+		VkAttachmentReference depth_stencil_attachment;
+	};
+
+	std::vector<Subpass> subpass_holders;
+	std::vector<VkSubpassDescription> subpasses;
+	subpasses.reserve(in_create_info.subpasses.size());
+	subpass_holders.reserve(in_create_info.subpasses.size());
+	for(const auto& subpass : in_create_info.subpasses)
+	{
+		CB_CHECK(subpass.resolve_attachments.empty()
+			|| subpass.resolve_attachments.size() == subpass.color_attachments.size());
+		
+		VkSubpassDescription desc = {};
+		desc.flags = 0;
+		desc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+
+		auto process_attachment_reference_single = [](const AttachmentReference& in_src,
+			VkAttachmentReference& in_dst)
+		{
+			in_dst.attachment = in_src.attachment;
+			in_dst.layout = convert_texture_layout(in_src.layout);
+		};
+		
+		auto process_attachment_reference_multiple = [](const std::vector<AttachmentReference>& in_src,
+			std::vector<VkAttachmentReference>& in_dst)
+		{
+			in_dst.reserve(in_src.size());
+			for(const auto& src_ref : in_src)
+			{
+				VkAttachmentReference ref;
+				ref.attachment = src_ref.attachment;
+				ref.layout = convert_texture_layout(src_ref.layout);
+				in_dst.push_back(ref);
+			}
+		};
+
+		auto& holder = subpass_holders.emplace_back();
+		
+		process_attachment_reference_multiple(subpass.input_attachments, holder.input_attachments);
+		process_attachment_reference_multiple(subpass.color_attachments, holder.color_attachments);
+		process_attachment_reference_multiple(subpass.resolve_attachments, holder.resolve_attachments);
+		process_attachment_reference_single(subpass.depth_stencil_attachment, holder.depth_stencil_attachment);
+
+		desc.inputAttachmentCount = static_cast<uint32_t>(holder.input_attachments.size());
+		desc.pInputAttachments = holder.input_attachments.data();
+		desc.colorAttachmentCount = static_cast<uint32_t>(holder.color_attachments.size());
+		desc.pColorAttachments = holder.color_attachments.data();
+		desc.pResolveAttachments = holder.resolve_attachments.data();
+		desc.preserveAttachmentCount = static_cast<uint32_t>(subpass.preserve_attachments.size());
+		desc.pPreserveAttachments = subpass.preserve_attachments.data();
+		
+		subpasses.push_back(desc);
+	}
 	
+	create_info.subpassCount = static_cast<uint32_t>(subpasses.size());
+	create_info.pSubpasses = subpasses.data();
+	create_info.dependencyCount = 0;
+	create_info.pDependencies = nullptr;
+
+	VkRenderPass render_pass;
+	VkResult result = vkCreateRenderPass(get_device(),
+		&create_info,
+		nullptr,
+		&render_pass);
+	if(result != VK_SUCCESS)
+		return make_error(convert_result(result));
+
+	auto ret = new_resource<VulkanRenderPass>(*this, render_pass);
+	return make_result(ret.get());
+}
+
+cb::Result<BackendDeviceResource, Result> VulkanDevice::create_command_pool(const CommandPoolCreateInfo& in_create_info)
+{
+	VkCommandPoolCreateInfo create_info = {};
+	create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	create_info.pNext = nullptr;
+	create_info.flags = 0;
+	auto index = device_wrapper.device.get_queue_index(convert_queue_type(in_create_info.queue_type));
+	if(!index)
+	{
+		spdlog::error("Failed to create Vulkan command pool: {}", index.error().message());
+		return make_error(Result::ErrorInitializationFailed);
+	}
+	create_info.queueFamilyIndex = index.value();
+	VkCommandPool command_pool;
+	VkResult result = vkCreateCommandPool(get_device(), 
+		&create_info,
+		nullptr,
+		&command_pool);
+	if(result != VK_SUCCESS)
+		return make_error(convert_result(result));
+
+	auto ret = new_resource<VulkanCommandPool>(*this, command_pool);
+	return make_result(ret.get());
+}
+
+cb::Result<BackendDeviceResource, Result> VulkanDevice::create_texture_view(const TextureViewCreateInfo& in_create_info)
+{
+	VkImageViewCreateInfo create_info = {};
+	create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	create_info.pNext = nullptr;
+	create_info.flags = 0;
+	create_info.viewType = convert_view_type(in_create_info.type);
+	create_info.image = get_resource<VulkanTexture>(in_create_info.texture)->get_texture();
+	create_info.format = convert_format(in_create_info.format);
+	create_info.subresourceRange = convert_subresource_range(in_create_info.subresource_range);
+
+	VkImageView view;
+	VkResult result = vkCreateImageView(get_device(),
+		&create_info,
+		nullptr,
+		&view);
+	if(result != VK_SUCCESS)
+		return make_error(convert_result(result));
+
+	auto ret = new_resource<VulkanTextureView>(*this, view);
+	return make_result(ret.get());
+}
+
+cb::Result<BackendDeviceResource, Result> VulkanDevice::create_semaphore(const SemaphoreCreateInfo& in_create_info)
+{
+	(void)(in_create_info);
+	
+	VkSemaphoreCreateInfo create_info = {};
+	create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	create_info.pNext = nullptr;
+	create_info.flags = 0;
+
+	VkSemaphore semaphore;
+	VkResult result = vkCreateSemaphore(get_device(),
+		&create_info,
+		nullptr,
+		&semaphore);
+	if(result != VK_SUCCESS)
+		return make_error(convert_result(result));
+
+	auto ret = new_resource<VulkanSemaphore>(*this, semaphore);
+	return make_result(ret.get());
+}
+
+cb::Result<BackendDeviceResource, Result> VulkanDevice::create_fence(const FenceCreateInfo& in_create_info)
+{
+	VkFenceCreateInfo create_info = {};
+	create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	create_info.pNext = nullptr;
+	create_info.flags = 0;
+
+	if(in_create_info.signaled)
+		create_info.flags |= VK_FENCE_CREATE_SIGNALED_BIT;
+
+	VkFence fence;
+	VkResult result = vkCreateFence(get_device(),
+		&create_info,
+		nullptr,
+		&fence);
+	if(result != VK_SUCCESS)
+		return make_error(convert_result(result));
+
+	auto ret = new_resource<VulkanFence>(*this, fence);
+	return make_result(ret.get());
+}
+
+cb::Result<BackendDeviceResource, Result> VulkanDevice::create_pipeline_layout(const PipelineLayoutCreateInfo& in_create_info)
+{
+	std::vector<VkDescriptorSetLayout> set_layouts;
+	set_layouts.reserve(in_create_info.set_layouts.size());
+	for(const auto& set : in_create_info.set_layouts)
+	{
+		std::vector<VkDescriptorSetLayoutBinding> bindings;
+		bindings.reserve(set.bindings.size());
+		for(const auto& binding : set.bindings)
+		{
+			VkDescriptorSetLayoutBinding info = {};
+			info.stageFlags = convert_shader_stage_flags(binding.stage);
+			info.descriptorCount = binding.count;
+			info.binding = binding.binding;
+			info.pImmutableSamplers = nullptr;
+			bindings.emplace_back(info);
+		}
+		
+		VkDescriptorSetLayoutCreateInfo create_info = {};
+		create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		create_info.pNext = nullptr;
+		create_info.flags = 0;
+		create_info.bindingCount = static_cast<uint32_t>(bindings.size());
+		create_info.pBindings = bindings.data();
+
+		VkDescriptorSetLayout set_layout;
+		vkCreateDescriptorSetLayout(get_device(),
+			&create_info,
+			nullptr,
+			&set_layout);
+		
+		
+		set_layouts.emplace_back(set_layout);		
+	}
+
+	std::vector<VkPushConstantRange> push_constant_ranges;
+	for(const auto& push_constant : in_create_info.push_constant_ranges)
+	{
+		VkPushConstantRange range = {};
+		range.stageFlags = convert_shader_stage_flags(push_constant.stage);
+		range.offset = push_constant.offset;
+		range.size = push_constant.size;
+		push_constant_ranges.emplace_back(range);
+	}
+	
+	VkPipelineLayoutCreateInfo create_info = {};
+	create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	create_info.pNext = nullptr;
+	create_info.flags = 0;
+	create_info.setLayoutCount = static_cast<uint32_t>(set_layouts.size());
+	create_info.pSetLayouts = set_layouts.data();
+	create_info.pushConstantRangeCount = static_cast<uint32_t>(push_constant_ranges.size());
+	create_info.pPushConstantRanges = push_constant_ranges.data();
+
+	VkPipelineLayout layout;
+	VkResult result = vkCreatePipelineLayout(get_device(),
+		&create_info,
+		nullptr,
+		&layout);
+	if(result != VK_SUCCESS)
+		return make_error(convert_result(result));
+
+	auto ret = new_resource<VulkanPipelineLayout>(*this, layout);
+	return make_result(ret.get());
+}
+
+cb::Result<std::vector<BackendDeviceResource>, Result> VulkanDevice::allocate_command_lists(const BackendDeviceResource& in_pool, 
+	const uint32_t in_count)
+{
+	VkCommandBufferAllocateInfo alloc_info = {};
+	alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	alloc_info.pNext = nullptr;
+	alloc_info.commandPool = get_resource<VulkanCommandPool>(in_pool)->get_command_pool();
+	alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	alloc_info.commandBufferCount = in_count;
+
+	std::vector<VkCommandBuffer> buffers;
+	buffers.resize(in_count);
+
+	VkResult result = vkAllocateCommandBuffers(get_device(),
+		&alloc_info,
+		buffers.data());
+	if(result != VK_SUCCESS)
+		return make_error(convert_result(result));
+	
+	std::vector<BackendDeviceResource> resources;
+	resources.reserve(in_count);
+	for(const auto& buffer : buffers)
+	{
+		resources.emplace_back(new_resource<VulkanCommandList>(*this, buffer));	
+	}
+
+	return make_result(resources);
+}
+
+void VulkanDevice::free_command_lists(const BackendDeviceResource& in_pool, const std::vector<BackendDeviceResource>& in_lists)
+{
+	std::vector<VkCommandBuffer> buffers;
+	buffers.reserve(in_lists.size());
+	for(const auto& list : in_lists)
+	{
+		buffers.emplace_back(get_resource<VulkanCommandList>(list)->get_command_buffer());
+		free_resource<VulkanCommandList>(list);
+	}
+
+	vkFreeCommandBuffers(get_device(), 
+		get_resource<VulkanCommandPool>(in_pool)->get_command_pool(),
+		static_cast<uint32_t>(buffers.size()),
+		buffers.data());
+}
+
+void VulkanDevice::reset_command_pool(const BackendDeviceResource& in_pool)
+{
+	vkResetCommandPool(get_device(),
+		get_resource<VulkanCommandPool>(in_pool)->get_command_pool(),
+		0);	
 }
 
 void VulkanDevice::destroy_buffer(const BackendDeviceResource& in_buffer)
@@ -295,14 +682,39 @@ void VulkanDevice::destroy_shader(const BackendDeviceResource& in_shader)
 	free_resource<VulkanShader>(in_shader);
 }
 
-void VulkanDevice::destroy_gfx_pipeline(const BackendDeviceResource& in_shader)
+void VulkanDevice::destroy_pipeline(const BackendDeviceResource& in_pipeline)
 {
-	
+	free_resource<VulkanPipeline>(in_pipeline);		
 }
 	
-void VulkanDevice::destroy_render_pass(const BackendDeviceResource& in_shader)
+void VulkanDevice::destroy_render_pass(const BackendDeviceResource& in_render_pass)
 {
-	
+	free_resource<VulkanRenderPass>(in_render_pass);		
+}
+
+void VulkanDevice::destroy_command_pool(const BackendDeviceResource& in_command_pool)
+{
+	free_resource<VulkanCommandPool>(in_command_pool);
+}
+
+void VulkanDevice::destroy_texture_view(const BackendDeviceResource& in_texture_view)
+{
+	free_resource<VulkanTextureView>(in_texture_view);	
+}
+
+void VulkanDevice::destroy_semaphore(const BackendDeviceResource& in_semaphore)
+{
+	free_resource<VulkanSemaphore>(in_semaphore);		
+}
+
+void VulkanDevice::destroy_fence(const BackendDeviceResource& in_fence)
+{
+	free_resource<VulkanFence>(in_fence);
+}
+
+void VulkanDevice::destroy_pipeline_layout(const BackendDeviceResource& in_pipeline_layout)
+{
+	free_resource<VulkanPipelineLayout>(in_pipeline_layout);				
 }
 
 /** Buffers */
@@ -325,5 +737,215 @@ void VulkanDevice::unmap_buffer(const BackendDeviceResource& in_buffer)
 	auto buffer = get_resource<VulkanBuffer>(in_buffer);
 	vmaUnmapMemory(allocator, buffer->get_allocation());
 }
+
+/** Swapchain */
+Result VulkanDevice::acquire_swapchain_image(const BackendDeviceResource& in_swapchain,
+	const BackendDeviceResource& in_signal_semaphore)
+{
+	VkSemaphore signal_semaphore = get_resource<VulkanSemaphore>(in_signal_semaphore)->get_semaphore();
+	return convert_result(get_resource<VulkanSwapChain>(in_swapchain)->acquire_image(signal_semaphore));
+}
+
+void VulkanDevice::present(const BackendDeviceResource& in_swapchain,
+	const std::span<BackendDeviceResource>& in_wait_semaphores)
+{
+	std::vector<VkSemaphore> wait_semaphores;
+	wait_semaphores.reserve(in_wait_semaphores.size());
+
+	for(const auto& semaphore : in_wait_semaphores)
+		wait_semaphores.emplace_back(get_resource<VulkanSemaphore>(semaphore)->get_semaphore());
 	
+	get_resource<VulkanSwapChain>(in_swapchain)->present(wait_semaphores);
+}
+
+BackendDeviceResource VulkanDevice::get_swapchain_backbuffer_view(const BackendDeviceResource& in_swap_chain)
+{
+	return get_resource<VulkanSwapChain>(in_swap_chain)->get_texture_view();
+}
+
+/** Fences */
+Result VulkanDevice::wait_for_fences(const std::span<BackendDeviceResource>& in_fences, 
+	const bool in_wait_for_all, 
+	const uint64_t in_timeout)
+{
+	std::vector<VkFence> fences;
+	fences.reserve(in_fences.size());
+	for(const auto& fence : in_fences)
+		fences.emplace_back(get_resource<VulkanFence>(fence)->get_fence());
+	
+	return convert_result(vkWaitForFences(get_device(),
+		static_cast<uint32_t>(fences.size()),
+		fences.data(),
+		in_wait_for_all,
+		in_timeout));
+}
+
+void VulkanDevice::reset_fences(const std::span<BackendDeviceResource>& in_fences)
+{
+	std::vector<VkFence> fences;
+	fences.reserve(in_fences.size());
+	for(const auto& fence : in_fences)
+		fences.emplace_back(get_resource<VulkanFence>(fence)->get_fence());
+
+	vkResetFences(get_device(),
+		static_cast<uint32_t>(fences.size()),
+		fences.data());
+}
+
+/** Commands */
+void VulkanDevice::begin_cmd_list(const BackendDeviceResource& in_list)
+{
+	VkCommandBufferBeginInfo begin_info = {};
+	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	begin_info.pNext = nullptr;
+	begin_info.flags = 0;
+	begin_info.pInheritanceInfo = nullptr;
+	
+	vkBeginCommandBuffer(
+		get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+		&begin_info);
+}
+
+void VulkanDevice::cmd_begin_render_pass(const BackendDeviceResource& in_list,
+	const BackendDeviceResource& in_render_pass,
+	const Framebuffer& in_framebuffer,
+	Rect2D in_render_area,
+	std::span<ClearValue> in_clear_values)
+{
+	VkRenderPass render_pass = get_resource<VulkanRenderPass>(in_render_pass)->get_render_pass();
+	
+	VkRenderPassBeginInfo begin_info = {};
+	begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	begin_info.pNext = nullptr;
+	begin_info.framebuffer = framebuffer_manager.get_or_create(render_pass, in_framebuffer);
+	begin_info.clearValueCount = static_cast<uint32_t>(in_clear_values.size());
+	begin_info.pClearValues = reinterpret_cast<VkClearValue*>(in_clear_values.data());
+	begin_info.renderArea = *reinterpret_cast<VkRect2D*>(&in_render_area);
+	begin_info.renderPass = render_pass;
+	
+	vkCmdBeginRenderPass(
+		get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+		&begin_info,
+		VK_SUBPASS_CONTENTS_INLINE);
+}
+
+void VulkanDevice::cmd_bind_pipeline(const BackendDeviceResource& in_list, 
+	const PipelineBindPoint in_bind_point, 
+	const BackendDeviceResource& in_pipeline)
+{
+	vkCmdBindPipeline(
+		get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+		convert_pipeline_bind_point(in_bind_point),
+		get_resource<VulkanPipeline>(in_pipeline)->get_pipeline());
+}
+
+void VulkanDevice::cmd_draw(const BackendDeviceResource& in_list,
+	const uint32_t in_vertex_count,
+	const uint32_t in_instance_count,
+	const uint32_t in_first_vertex,
+	const uint32_t in_first_instance)
+{
+	vkCmdDraw(
+		get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+		in_vertex_count,
+		in_instance_count,
+		in_first_vertex,
+		in_first_instance);
+}
+
+void VulkanDevice::cmd_end_render_pass(const BackendDeviceResource& in_list)
+{
+	vkCmdEndRenderPass(get_resource<VulkanCommandList>(in_list)->get_command_buffer());
+}
+
+void VulkanDevice::cmd_set_viewports(const BackendDeviceResource& in_list, 
+	const uint32_t in_first_viewport, 
+	const std::span<Viewport>& in_viewports)
+{
+	vkCmdSetViewport(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+		in_first_viewport,
+		static_cast<uint32_t>(in_viewports.size()),
+		reinterpret_cast<VkViewport*>(in_viewports.data()));	
+}
+
+void VulkanDevice::cmd_set_scissors(const BackendDeviceResource& in_list, 
+	const uint32_t in_first_scissor, 
+	const std::span<Rect2D>& in_scissors)
+{
+	vkCmdSetScissor(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+		in_first_scissor,
+		static_cast<uint32_t>(in_scissors.size()),
+		reinterpret_cast<VkRect2D*>(in_scissors.data()));
+}
+
+void VulkanDevice::end_cmd_list(const BackendDeviceResource& in_list)
+{
+	vkEndCommandBuffer(get_resource<VulkanCommandList>(in_list)->get_command_buffer());
+}
+
+void VulkanDevice::queue_submit(const QueueType& in_type, 
+	const std::span<BackendDeviceResource>& in_command_lists, 
+	const std::span<BackendDeviceResource>& in_wait_semaphores, 
+	const std::span<PipelineStageFlags>& in_wait_pipeline_stages, 
+	const std::span<BackendDeviceResource>& in_signal_semaphores, 
+	const BackendDeviceResource& in_fence)
+{
+	vkb::QueueType type;
+	switch(in_type)
+	{
+	default:
+	case QueueType::Gfx:
+		type = vkb::QueueType::graphics;
+		break;
+	case QueueType::Compute:
+		type = vkb::QueueType::compute;
+		break;
+	case QueueType::Transfer:
+		type = vkb::QueueType::transfer;
+		break;
+	case QueueType::Present:
+		type = vkb::QueueType::present;
+		break;
+	}
+	
+	VkQueue queue = device_wrapper.device.get_queue(type).value();
+
+	std::vector<VkCommandBuffer> command_buffers;
+	command_buffers.reserve(in_command_lists.size());
+	for(const auto& list : in_command_lists)
+		command_buffers.emplace_back(get_resource<VulkanCommandList>(list)->get_command_buffer());
+	
+	std::vector<VkSemaphore> wait_semaphores;
+	wait_semaphores.reserve(in_wait_semaphores.size());
+	for(const auto& semaphore : in_wait_semaphores)
+		wait_semaphores.emplace_back(get_resource<VulkanSemaphore>(semaphore)->get_semaphore());
+
+	std::vector<VkSemaphore> signal_semaphores;
+	signal_semaphores.reserve(in_signal_semaphores.size());
+	for(const auto& semaphore : in_signal_semaphores)
+		signal_semaphores.emplace_back(get_resource<VulkanSemaphore>(semaphore)->get_semaphore());
+
+	std::vector<VkPipelineStageFlags> wait_stage;
+	wait_stage.reserve(in_wait_semaphores.size());
+	for(const auto& stage : in_wait_pipeline_stages)
+		wait_stage.emplace_back(convert_pipeline_stage_flags(stage));
+	
+	VkSubmitInfo submit_info = {};
+	submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit_info.pNext = nullptr; 
+	submit_info.commandBufferCount = static_cast<uint32_t>(command_buffers.size());
+	submit_info.pCommandBuffers = command_buffers.data();
+	submit_info.waitSemaphoreCount = static_cast<uint32_t>(wait_semaphores.size()); 
+	submit_info.pWaitSemaphores = wait_semaphores.data();
+	submit_info.pWaitDstStageMask = wait_stage.data();
+	submit_info.signalSemaphoreCount = static_cast<uint32_t>(signal_semaphores.size());
+	submit_info.pSignalSemaphores = signal_semaphores.data();
+
+	VkFence fence = VK_NULL_HANDLE;
+	if(in_fence != null_backend_resource)
+		fence = get_resource<VulkanFence>(in_fence)->get_fence();
+	
+	vkQueueSubmit(queue, 1, &submit_info, fence);
+}
+
 }

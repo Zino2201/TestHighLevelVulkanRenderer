@@ -9,6 +9,10 @@
 #include "Shader.hpp"
 #include "RenderPass.hpp"
 #include "GfxPipeline.hpp"
+#include "Command.hpp"
+#include "Rect.hpp"
+#include "Sync.hpp"
+#include "PipelineLayout.hpp"
 
 namespace cb::gfx
 {
@@ -18,6 +22,7 @@ namespace cb::gfx
  * This is the low-level version of cb::gfx::Device, it should not be used directly!
  * Every function here must be called at the proper time, it is not the responsibility of the BackendDevice to ensure
  * that the GPU isn't accessing a specific resource !
+ * \remark There is no additional runtime parameter checks !
  */
 class BackendDevice
 {
@@ -31,20 +36,104 @@ public:
 	void operator=(const BackendDevice&) = delete;
 	BackendDevice& operator=(BackendDevice&&) noexcept = default;
 
+	virtual void new_frame() = 0;
+	
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_buffer(const BufferCreateInfo& in_create_info) = 0;
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_swap_chain(const SwapChainCreateInfo& in_create_info) = 0;
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_shader(const ShaderCreateInfo& in_create_info) = 0;
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_gfx_pipeline(const GfxPipelineCreateInfo& in_create_info) = 0;
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_render_pass(const RenderPassCreateInfo& in_create_info) = 0;
+	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_command_pool(const CommandPoolCreateInfo& in_create_info) = 0;
+	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_texture_view(const TextureViewCreateInfo& in_create_info) = 0;
+	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_semaphore(const SemaphoreCreateInfo& in_create_info) = 0;
+	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_fence(const FenceCreateInfo& in_create_info) = 0;
+	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_pipeline_layout(const PipelineLayoutCreateInfo& in_create_info) = 0;
+	
 	virtual void destroy_buffer(const BackendDeviceResource& in_swap_chain) = 0;
 	virtual void destroy_swap_chain(const BackendDeviceResource& in_swap_chain) = 0;
 	virtual void destroy_shader(const BackendDeviceResource& in_shader) = 0;
-	virtual void destroy_gfx_pipeline(const BackendDeviceResource& in_shader) = 0;
-	virtual void destroy_render_pass(const BackendDeviceResource& in_shader) = 0;
+	virtual void destroy_pipeline(const BackendDeviceResource& in_pipeline) = 0;
+	virtual void destroy_render_pass(const BackendDeviceResource& in_render_pass) = 0;
+	virtual void destroy_command_pool(const BackendDeviceResource& in_command_pool) = 0;
+	virtual void destroy_texture_view(const BackendDeviceResource& in_texture_view) = 0;
+	virtual void destroy_semaphore(const BackendDeviceResource& in_semaphore) = 0;
+	virtual void destroy_fence(const BackendDeviceResource& in_fence) = 0;
+	virtual void destroy_pipeline_layout(const BackendDeviceResource& in_pipeline_layout) = 0;
 
 	/** Buffer */
 	[[nodiscard]] virtual cb::Result<void*, Result> map_buffer(const BackendDeviceResource& in_buffer) = 0;
 	virtual void unmap_buffer(const BackendDeviceResource& in_buffer) = 0;
+
+	/** Command pool */
+	[[nodiscard]] virtual cb::Result<std::vector<BackendDeviceResource>, Result> allocate_command_lists(const BackendDeviceResource& in_pool, 
+		const uint32_t in_count) = 0;
+	virtual void free_command_lists(const BackendDeviceResource& in_pool, const std::vector<BackendDeviceResource>& in_lists) = 0;
+	virtual void reset_command_pool(const BackendDeviceResource& in_pool) = 0;
+	
+	/** Swapchain */
+	[[nodiscard]] virtual Result acquire_swapchain_image(const BackendDeviceResource& in_swapchain,
+		const BackendDeviceResource& in_signal_semaphore) = 0;
+	virtual void present(const BackendDeviceResource& in_swapchain,
+		const std::span<BackendDeviceResource>& in_wait_semaphores = {}) = 0;
+	[[nodiscard]] virtual BackendDeviceResource get_swapchain_backbuffer_view(const BackendDeviceResource& in_swapchain) = 0;
+	
+	/** Commands */
+	virtual void begin_cmd_list(const BackendDeviceResource& in_list) = 0;
+	virtual void cmd_begin_render_pass(const BackendDeviceResource& in_list,
+		const BackendDeviceResource& in_render_pass,
+		const Framebuffer& in_framebuffer,
+		Rect2D in_render_area,
+		std::span<ClearValue> in_clear_values) = 0;
+	virtual void cmd_bind_pipeline(const BackendDeviceResource& in_list,
+		const PipelineBindPoint in_bind_point,
+		const BackendDeviceResource& in_pipeline) = 0;
+	virtual void cmd_draw(const BackendDeviceResource& in_list,
+		const uint32_t in_vertex_count,
+		const uint32_t in_instance_count,
+		const uint32_t in_first_vertex,
+		const uint32_t in_first_instance) = 0;
+	virtual void cmd_end_render_pass(const BackendDeviceResource& in_list) = 0;
+
+	virtual void cmd_set_viewports(const BackendDeviceResource& in_list,
+		const uint32_t in_first_viewport,
+		const std::span<Viewport>& in_viewports) = 0;
+	virtual void cmd_set_scissors(const BackendDeviceResource& in_list,
+		const uint32_t in_first_scissor,
+		const std::span<Rect2D>& in_scissors) = 0;
+	
+	virtual void end_cmd_list(const BackendDeviceResource& in_list) = 0;
+
+	/** Fence */
+
+	/**
+	 * Wait for a list of fences
+	 * \param in_fences List of fences
+	 * \param in_wait_for_all Wait for all fences ?
+	 * \param in_timeout Timeout to wait (in nanoseconds)
+	 */
+	virtual Result wait_for_fences(const std::span<BackendDeviceResource>& in_fences,
+		const bool in_wait_for_all = true,
+		const uint64_t in_timeout = std::numeric_limits<uint64_t>::max()) = 0;
+
+	virtual void reset_fences(const std::span<BackendDeviceResource>& in_fences) = 0;
+
+	/** Queue */
+
+	/**
+	 * Submit command lists to a queue
+	 * \param in_type Targetted queue
+	 * \param in_command_lists Lists to execute
+	 * \param in_wait_semaphores Semaphores to wait from
+	 * \param in_wait_pipeline_stages Pipeline stage to wait for the semaphore
+	 * \param in_signal_semaphores Semaphores to signal when all lists are executed
+	 * \param in_fence Fence to signal when work is done
+	 */
+	virtual void queue_submit(const QueueType& in_type,
+		const std::span<BackendDeviceResource>& in_command_lists,
+		const std::span<BackendDeviceResource>& in_wait_semaphores = {},
+		const std::span<PipelineStageFlags>& in_wait_pipeline_stages = {},
+		const std::span<BackendDeviceResource>& in_signal_semaphores = {},
+		const BackendDeviceResource& in_fence = null_backend_resource) = 0;
 };
 	
 }

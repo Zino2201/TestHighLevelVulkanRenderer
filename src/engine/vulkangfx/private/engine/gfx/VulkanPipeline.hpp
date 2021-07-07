@@ -17,6 +17,9 @@ public:
 	{
 		vkDestroyPipeline(device.get_device(), pipeline, nullptr);	
 	}
+
+	[[nodiscard]] VulkanDevice& get_device() const { return device; }
+	[[nodiscard]] VkPipeline get_pipeline() const { return pipeline; }
 private:
 	VulkanDevice& device;
 	VkPipeline pipeline;
@@ -265,5 +268,63 @@ inline VkColorComponentFlags convert_color_component_flags(const ColorComponentF
 	
 	return flags;
 }
+
+inline VkPipelineStageFlags convert_pipeline_stage_flags(const PipelineStageFlags& in_flags)
+{
+	VkPipelineStageFlags flags = 0;
+
+	if(in_flags & PipelineStageFlagBits::TopOfPipe)
+		flags |= VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 	
+	if(in_flags & PipelineStageFlagBits::InputAssembler)
+		flags |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+	
+	if(in_flags & PipelineStageFlagBits::VertexShader)
+		flags |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+	
+	if(in_flags & PipelineStageFlagBits::TessellationControlShader)
+		flags |= VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT;
+	
+	if(in_flags & PipelineStageFlagBits::TessellationEvaluationShader)
+		flags |= VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT;
+
+	if(in_flags & PipelineStageFlagBits::GeometryShader)
+		flags |= VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
+	
+	if(in_flags & PipelineStageFlagBits::EarlyFragmentTests)
+		flags |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	
+	if(in_flags & PipelineStageFlagBits::FragmentShader)
+		flags |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	
+	if(in_flags & PipelineStageFlagBits::LateFragmentTests)
+		flags |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+	
+	if(in_flags & PipelineStageFlagBits::ColorAttachmentOutput)
+		flags |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	
+	if(in_flags & PipelineStageFlagBits::ComputeShader)
+		flags |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+	
+	if(in_flags & PipelineStageFlagBits::Transfer)
+		flags |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+	
+	if(in_flags & PipelineStageFlagBits::BottomOfPipe)
+		flags |= VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+
+	return flags;
+}
+
+inline VkPipelineBindPoint convert_pipeline_bind_point(const PipelineBindPoint& in_bind_point)
+{
+	switch(in_bind_point)
+	{
+	default:
+	case PipelineBindPoint::Gfx:
+		return VK_PIPELINE_BIND_POINT_GRAPHICS;
+	case PipelineBindPoint::Compute:
+		return VK_PIPELINE_BIND_POINT_COMPUTE;
+	}
+}
+
 }

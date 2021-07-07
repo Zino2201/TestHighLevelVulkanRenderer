@@ -14,12 +14,13 @@
 #include "engine/gfx/Result.hpp"
 #include "engine/gfx/Shader.hpp"
 #include "engine/gfx/Format.hpp"
+#include <atomic>
 
 namespace cb::gfx
 {
 
 /** Debug counter used to track undeleted resources */
-inline static size_t alive_vulkan_objects = 0;
+inline static std::atomic_size_t alive_vulkan_objects = 0;
 
 template<typename T>
 struct VulkanResourcePtr
@@ -48,6 +49,12 @@ template<typename T, typename... Args>
 VulkanResourcePtr<T> new_resource(Args&&... in_args)
 {
 	alive_vulkan_objects++;
+	return VulkanResourcePtr(new T(std::forward<Args>(in_args)...));
+}
+
+template<typename T, typename... Args>
+VulkanResourcePtr<T> new_resource_no_count(Args&&... in_args)
+{
 	return VulkanResourcePtr(new T(std::forward<Args>(in_args)...));
 }
 

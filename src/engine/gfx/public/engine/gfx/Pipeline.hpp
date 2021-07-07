@@ -14,8 +14,8 @@ enum class PipelineStageFlagBits
 	TessellationControlShader = 1 << 3,
 	TessellationEvaluationShader = 1 << 4,
 	GeometryShader = 1 << 5,
-	FragmentShader = 1 << 6,
-	EarlyFragmentTests = 1 << 7,
+	EarlyFragmentTests = 1 << 6,
+	FragmentShader = 1 << 7,
 	LateFragmentTests = 1 << 8,
 	ColorAttachmentOutput = 1 << 9,
 	ComputeShader = 1 << 10,
@@ -60,5 +60,29 @@ struct PipelineShaderStage
 			entry_point == in_other.entry_point;
 	}
 };
-	
+
+enum class PipelineBindPoint
+{
+	Gfx,
+	Compute
+};
+
+struct Viewport
+{
+	float x;
+	float y;
+	float width;
+	float height;
+	float min_depth;
+	float max_depth;
+
+	explicit Viewport(const float in_x = 0.f,
+		const float in_y = 0.f,
+		const float in_width = 0.f,
+		const float in_height = 0.f,
+		const float in_min_depth = 0.f,
+		const float in_max_depth = 1.f) : x(in_x), y(in_y),
+		width(in_width), height(in_height), min_depth(in_min_depth), max_depth(in_max_depth) {}
+};
+
 }

@@ -44,5 +44,30 @@ inline VkShaderStageFlagBits convert_shader_stage_bits(ShaderStageFlagBits in_st
 		return VK_SHADER_STAGE_COMPUTE_BIT;
 	}
 }
+
+inline VkShaderStageFlags convert_shader_stage_flags(ShaderStageFlags in_flags)
+{
+	VkShaderStageFlags flags = 0;
+
+	if(in_flags & ShaderStageFlagBits::Vertex)
+		flags |= VK_SHADER_STAGE_VERTEX_BIT;
+	
+	if(in_flags & ShaderStageFlagBits::Fragment)
+		flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+	
+	if(in_flags & ShaderStageFlagBits::Geometry)
+		flags |= VK_SHADER_STAGE_GEOMETRY_BIT;
+	
+	if(in_flags & ShaderStageFlagBits::TessellationEvaluation)
+		flags |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+	
+	if(in_flags & ShaderStageFlagBits::TessellationControl)
+		flags |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+	
+	if(in_flags & ShaderStageFlagBits::Compute)
+		flags |= VK_SHADER_STAGE_COMPUTE_BIT;
+	
+	return flags;
+}
 	
 }

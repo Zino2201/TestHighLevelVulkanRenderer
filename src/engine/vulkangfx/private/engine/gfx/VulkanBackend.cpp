@@ -42,6 +42,9 @@ VulkanBackend::VulkanBackend(const BackendFlags& in_flags)
 					break;
 				case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
 					spdlog::error("[{}] {}", type, callback_data->pMessage);
+					/** temp fix */
+					if(std::string(callback_data->pMessage).find("nomad") == -1)
+						CB_DEBUGBREAK();
 					break;
 				}
 				
@@ -79,6 +82,7 @@ cb::Result<std::unique_ptr<BackendDevice>, std::string> VulkanBackend::create_de
 		vkb::PhysicalDeviceSelector phys_device_selector(instance);
 		/** We don't have any surfaces yet */
 		phys_device_selector.defer_surface_initialization();
+		phys_device_selector.require_present();
 		auto result = phys_device_selector.select();
 		if(!result)
 		{

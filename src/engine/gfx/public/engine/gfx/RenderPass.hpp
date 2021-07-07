@@ -1,6 +1,9 @@
 #pragma once
 
+#include "engine/Hash.hpp"
 #include "Texture.hpp"
+#include <span>
+#include <variant>
 
 namespace cb::gfx
 {
@@ -142,14 +145,13 @@ struct ClearDepthStencilValue
 
 union ClearValue
 {
-	ClearColorValue color;
-	ClearDepthStencilValue depth_stencil;
+	ClearColorValue clear_color;
+	ClearDepthStencilValue clear_depth_stencil_value;
 
-	ClearValue(const ClearColorValue& in_color) :
-		color(in_color) {}
-
-	ClearValue(const ClearDepthStencilValue& in_depth_stencil) :
-		depth_stencil(in_depth_stencil) {}
+	explicit ClearValue(const ClearColorValue& in_clear_color)
+		: clear_color(in_clear_color) {}
+	explicit ClearValue(const ClearDepthStencilValue& in_clear_depth_stencil_value)
+		: clear_depth_stencil_value(in_clear_depth_stencil_value) {}
 };
 
 /**
@@ -157,8 +159,7 @@ union ClearValue
  */
 struct Framebuffer
 {
-	std::array<BackendDeviceResource, max_attachments_per_framebuffer> color_attachments;
-	std::array<BackendDeviceResource, max_attachments_per_framebuffer> depth_attachments;
+	std::span<BackendDeviceResource> attachments;
 	uint32_t width;
 	uint32_t height;
 	uint32_t layers;
@@ -167,11 +168,32 @@ struct Framebuffer
 
 	bool operator==(const Framebuffer& other) const
 	{
-		return color_attachments == other.color_attachments &&
-			depth_attachments == other.depth_attachments &&
+		return attachments.data() == other.attachments.data() &&
 			width == other.width &&
 			height == other.height;
 	}
 };
 	
+}
+
+namespace std
+{
+
+template<> struct hash<cb::gfx::Framebuffer>
+{
+	uint64_t operator()(const cb::gfx::Framebuffer& in_framebuffer) const noexcept
+	{
+		uint64_t hash = 0;
+
+		for(const auto& attachment : in_framebuffer.attachments)
+			cb::hash_combine(hash, attachment);
+
+		cb::hash_combine(hash, in_framebuffer.width);
+		cb::hash_combine(hash, in_framebuffer.height);
+		cb::hash_combine(hash, in_framebuffer.layers);
+
+		return hash;
+	}
+	};
+
 }
