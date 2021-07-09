@@ -39,23 +39,25 @@ public:
 	virtual void new_frame() = 0;
 	
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_buffer(const BufferCreateInfo& in_create_info) = 0;
+	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_texture(const TextureCreateInfo& in_create_info) = 0;
+	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_texture_view(const TextureViewCreateInfo& in_create_info) = 0;
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_swap_chain(const SwapChainCreateInfo& in_create_info) = 0;
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_shader(const ShaderCreateInfo& in_create_info) = 0;
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_gfx_pipeline(const GfxPipelineCreateInfo& in_create_info) = 0;
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_render_pass(const RenderPassCreateInfo& in_create_info) = 0;
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_command_pool(const CommandPoolCreateInfo& in_create_info) = 0;
-	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_texture_view(const TextureViewCreateInfo& in_create_info) = 0;
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_semaphore(const SemaphoreCreateInfo& in_create_info) = 0;
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_fence(const FenceCreateInfo& in_create_info) = 0;
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_pipeline_layout(const PipelineLayoutCreateInfo& in_create_info) = 0;
 	
 	virtual void destroy_buffer(const BackendDeviceResource& in_swap_chain) = 0;
+	virtual void destroy_texture(const BackendDeviceResource& in_texture) = 0;
+	virtual void destroy_texture_view(const BackendDeviceResource& in_texture_view) = 0;
 	virtual void destroy_swap_chain(const BackendDeviceResource& in_swap_chain) = 0;
 	virtual void destroy_shader(const BackendDeviceResource& in_shader) = 0;
 	virtual void destroy_pipeline(const BackendDeviceResource& in_pipeline) = 0;
 	virtual void destroy_render_pass(const BackendDeviceResource& in_render_pass) = 0;
 	virtual void destroy_command_pool(const BackendDeviceResource& in_command_pool) = 0;
-	virtual void destroy_texture_view(const BackendDeviceResource& in_texture_view) = 0;
 	virtual void destroy_semaphore(const BackendDeviceResource& in_semaphore) = 0;
 	virtual void destroy_fence(const BackendDeviceResource& in_fence) = 0;
 	virtual void destroy_pipeline_layout(const BackendDeviceResource& in_pipeline_layout) = 0;
@@ -71,11 +73,14 @@ public:
 	virtual void reset_command_pool(const BackendDeviceResource& in_pool) = 0;
 	
 	/** Swapchain */
-	[[nodiscard]] virtual Result acquire_swapchain_image(const BackendDeviceResource& in_swapchain,
+	[[nodiscard]] virtual std::pair<Result, uint32_t> acquire_swapchain_image(const BackendDeviceResource& in_swapchain,
 		const BackendDeviceResource& in_signal_semaphore) = 0;
 	virtual void present(const BackendDeviceResource& in_swapchain,
 		const std::span<BackendDeviceResource>& in_wait_semaphores = {}) = 0;
 	[[nodiscard]] virtual BackendDeviceResource get_swapchain_backbuffer_view(const BackendDeviceResource& in_swapchain) = 0;
+	[[nodiscard]] virtual const std::vector<BackendDeviceResource>& get_swapchain_backbuffers(const BackendDeviceResource& in_swapchain) = 0;
+	[[nodiscard]] virtual const std::vector<BackendDeviceResource>& get_swapchain_backbuffer_views(const BackendDeviceResource& in_swapchain) = 0;
+	[[nodiscard]] virtual Format get_swapchain_format(const BackendDeviceResource& in_swapchain) = 0;
 	
 	/** Commands */
 	virtual void begin_cmd_list(const BackendDeviceResource& in_list) = 0;
@@ -100,6 +105,12 @@ public:
 	virtual void cmd_set_scissors(const BackendDeviceResource& in_list,
 		const uint32_t in_first_scissor,
 		const std::span<Rect2D>& in_scissors) = 0;
+
+	/** Transfer commands */
+	virtual void cmd_copy_buffer(const BackendDeviceResource& in_cmd_list,
+		const BackendDeviceResource& in_src_buffer,
+		const BackendDeviceResource& in_dst_buffer,
+		const std::span<BufferCopyRegion>& in_regions) = 0;
 	
 	virtual void end_cmd_list(const BackendDeviceResource& in_list) = 0;
 

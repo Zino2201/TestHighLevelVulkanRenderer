@@ -9,20 +9,27 @@ class VulkanTexture final
 {
 public:
 	VulkanTexture(VulkanDevice& in_device, 
-		VkImage in_image) : device(in_device), image(in_image) {}
+		VkImage in_image,
+		VmaAllocation in_allocation) : device(in_device), image(in_image), allocation(in_allocation) {}
 
+	VulkanTexture(VulkanDevice& in_device, 
+		VkImage in_image) : device(in_device), image(in_image), allocation(nullptr) {}
+	
 	VulkanTexture(VulkanTexture&& in_other) noexcept = delete;
 	
 	~VulkanTexture()
 	{
-		vkDestroyImage(device.get_device(), image, nullptr);
+		if(allocation)
+			vmaDestroyImage(device.get_allocator(), image, allocation);
 	}
 
 	[[nodiscard]] VulkanDevice& get_device() const { return device; }
 	[[nodiscard]] VkImage get_texture() const { return image; }
+	[[nodiscard]] VmaAllocation get_allocation() const { return allocation; }
 private:
 	VulkanDevice& device;
 	VkImage image;
+	VmaAllocation allocation;
 };
 
 inline VkSampleCountFlagBits convert_sample_count_bit(const SampleCountFlagBits& in_bit)
@@ -96,6 +103,19 @@ inline VkImageSubresourceRange convert_subresource_range(const TextureSubresourc
 	range.layerCount = in_range.layer_count;
 	range.aspectMask = convert_aspect_flags(in_range.aspect_flags);
 	return range;
+}
+
+inline VkImageType convert_texture_type(const TextureType& in_type)
+{
+	switch(in_type)
+	{
+	case TextureType::Tex1D:
+		return VK_IMAGE_TYPE_1D;
+	case TextureType::Tex2D:
+		return VK_IMAGE_TYPE_2D;
+	case TextureType::Tex3D:
+		return VK_IMAGE_TYPE_3D;
+	}
 }
 
 }

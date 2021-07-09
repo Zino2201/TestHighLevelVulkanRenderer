@@ -384,7 +384,7 @@ struct PipelineInputAssemblyStateCreateInfo
 
 struct GfxPipelineCreateInfo
 {
-	std::vector<PipelineShaderStage> shader_stages;
+	std::span<PipelineShaderStage> shader_stages;
 	PipelineVertexInputStateCreateInfo vertex_input_state;
 	PipelineInputAssemblyStateCreateInfo input_assembly_state;
 	PipelineRasterizationStateCreateInfo rasterization_state;
@@ -397,7 +397,7 @@ struct GfxPipelineCreateInfo
 	/** Subpass where this pipeline will be used */
 	uint32_t subpass;
 
-	GfxPipelineCreateInfo(const std::vector<PipelineShaderStage>& in_shader_stages = {},
+	GfxPipelineCreateInfo(const std::span<PipelineShaderStage>& in_shader_stages = {},
 		const PipelineVertexInputStateCreateInfo& in_vertex_input_state = PipelineVertexInputStateCreateInfo(),
 		const PipelineInputAssemblyStateCreateInfo& in_input_assembly_state = PipelineInputAssemblyStateCreateInfo(),
 		const PipelineRasterizationStateCreateInfo& in_rasterization_state = PipelineRasterizationStateCreateInfo(),
@@ -414,7 +414,7 @@ struct GfxPipelineCreateInfo
 
 	bool operator==(const GfxPipelineCreateInfo& in_create_info) const
 	{
-		return shader_stages == in_create_info.shader_stages &&
+		return shader_stages.data() == in_create_info.shader_stages.data() &&
 			vertex_input_state == in_create_info.vertex_input_state &&
 			input_assembly_state == in_create_info.input_assembly_state &&
 			rasterization_state == in_create_info.rasterization_state &&
@@ -427,4 +427,153 @@ struct GfxPipelineCreateInfo
 	}
 };
 	
+}
+
+namespace std
+{
+
+template<> struct hash<cb::gfx::VertexInputBindingDescription>
+{
+	uint64_t operator()(const cb::gfx::VertexInputBindingDescription& in_binding) const noexcept
+	{
+		uint64_t hash = 0;
+
+		cb::hash_combine(hash, in_binding.binding);
+		cb::hash_combine(hash, in_binding.input_rate);
+		cb::hash_combine(hash, in_binding.stride);
+			
+		return hash;
+	}
+};
+
+template<> struct hash<cb::gfx::VertexInputAttributeDescription>
+{
+	uint64_t operator()(const cb::gfx::VertexInputAttributeDescription& in_attribute) const noexcept
+	{
+		uint64_t hash = 0;
+
+		cb::hash_combine(hash, in_attribute.binding);
+		cb::hash_combine(hash, in_attribute.location);
+		cb::hash_combine(hash, in_attribute.format);
+		cb::hash_combine(hash, in_attribute.offset);
+			
+		return hash;
+	}
+};
+
+template<> struct hash<cb::gfx::PipelineVertexInputStateCreateInfo>
+{
+	uint64_t operator()(const cb::gfx::PipelineVertexInputStateCreateInfo& in_state) const noexcept
+	{
+		uint64_t hash = 0;
+
+		for(const auto& binding : in_state.input_binding_descriptions)
+			cb::hash_combine(hash, binding);
+			
+		for(const auto& attribute : in_state.input_attribute_descriptions)
+			cb::hash_combine(hash, attribute);
+			
+		return hash;
+	}
+};
+
+template<> struct hash<cb::gfx::PipelineInputAssemblyStateCreateInfo>
+{
+	uint64_t operator()(const cb::gfx::PipelineInputAssemblyStateCreateInfo& in_state) const noexcept
+	{
+		uint64_t hash = 0;
+
+		cb::hash_combine(hash, in_state.primitive_topology);
+			
+		return hash;
+	}
+};
+
+template<> struct hash<cb::gfx::PipelineMultisamplingStateCreateInfo>
+{
+	uint64_t operator()(const cb::gfx::PipelineMultisamplingStateCreateInfo& in_state) const noexcept
+	{
+		uint64_t hash = 0;
+
+		cb::hash_combine(hash, in_state.samples);
+			
+		return hash;
+	}
+};
+
+template<> struct hash<cb::gfx::PipelineRasterizationStateCreateInfo>
+{
+	uint64_t operator()(const cb::gfx::PipelineRasterizationStateCreateInfo& in_state) const noexcept
+	{
+		uint64_t hash = 0;
+
+		cb::hash_combine(hash, in_state.enable_depth_clamp);
+		cb::hash_combine(hash, in_state.polygon_mode);
+		cb::hash_combine(hash, in_state.cull_mode);
+		cb::hash_combine(hash, in_state.enable_depth_bias);
+		cb::hash_combine(hash, in_state.depth_bias_constant_factor);
+		cb::hash_combine(hash, in_state.depth_bias_slope_factor);
+		cb::hash_combine(hash, in_state.depth_bias_clamp);
+			
+		return hash;
+	}
+};
+
+template<> struct hash<cb::gfx::StencilOpState>
+{
+	uint64_t operator()(const cb::gfx::StencilOpState& in_state) const noexcept
+	{
+		uint64_t hash = 0;
+
+		cb::hash_combine(hash, in_state.pass_op);
+		cb::hash_combine(hash, in_state.fail_op);
+		cb::hash_combine(hash, in_state.depth_fail_op);
+		cb::hash_combine(hash, in_state.compare_op);
+		cb::hash_combine(hash, in_state.compare_mask);
+		cb::hash_combine(hash, in_state.write_mask);
+		cb::hash_combine(hash, in_state.reference);
+			
+		return hash;
+	}
+};
+
+template<> struct hash<cb::gfx::PipelineDepthStencilStateCreateInfo>
+{
+	uint64_t operator()(const cb::gfx::PipelineDepthStencilStateCreateInfo& in_state) const noexcept
+	{
+		uint64_t hash = 0;
+
+		cb::hash_combine(hash, in_state.enable_depth_test);
+		cb::hash_combine(hash, in_state.enable_depth_write);
+		cb::hash_combine(hash, in_state.depth_compare_op);
+		cb::hash_combine(hash, in_state.enable_depth_bounds_test);
+		cb::hash_combine(hash, in_state.front_face);
+		cb::hash_combine(hash, in_state.back_face);
+			
+		return hash;
+	}
+};
+
+template<> struct hash<cb::gfx::GfxPipelineCreateInfo>
+{
+	uint64_t operator()(const cb::gfx::GfxPipelineCreateInfo& in_create_info) const noexcept
+	{
+		uint64_t hash = 0;
+
+		for(const auto& stage : in_create_info.shader_stages)
+			cb::hash_combine(hash, stage);
+
+		cb::hash_combine(hash, in_create_info.vertex_input_state);
+		cb::hash_combine(hash, in_create_info.input_assembly_state);
+		cb::hash_combine(hash, in_create_info.multisampling_state);
+		cb::hash_combine(hash, in_create_info.rasterization_state);
+		cb::hash_combine(hash, in_create_info.depth_stencil_state);
+		cb::hash_combine(hash, in_create_info.pipeline_layout);
+		cb::hash_combine(hash, in_create_info.render_pass);
+		cb::hash_combine(hash, in_create_info.subpass);
+
+		return hash;
+	}
+};
+
 }

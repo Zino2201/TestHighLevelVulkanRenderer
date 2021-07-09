@@ -178,5 +178,72 @@ inline VkFormat convert_format(const Format& in_format)
 	}
 }
 
+inline Format convert_vk_format(const VkFormat in_format)
+{
+	switch(in_format)
+	{
+	default:
+	case VK_FORMAT_UNDEFINED:
+		return Format::Undefined;
+
+	/** Depth & stencil */
+	case VK_FORMAT_D32_SFLOAT:
+		return Format::D32Sfloat;
+	case VK_FORMAT_D32_SFLOAT_S8_UINT:
+		return Format::D32SfloatS8Uint;
+	case VK_FORMAT_D24_UNORM_S8_UINT:
+		return Format::D24UnormS8Uint;
+
+	/** RGBA */
+	case VK_FORMAT_R8_UNORM:
+		return Format::R8Unorm;
+	case VK_FORMAT_R8G8B8_UNORM:
+		return Format::R8G8B8Unorm;
+	case VK_FORMAT_R8G8B8A8_UNORM:
+		return Format::R8G8B8A8Unorm;
+	case VK_FORMAT_R8G8B8A8_SRGB:
+		return Format::R8G8B8A8Srgb;
+	case VK_FORMAT_B8G8R8A8_UNORM:
+		return Format::B8G8R8A8Unorm;
+	case VK_FORMAT_R16G16B16A16_SFLOAT:
+		return Format::R16G16B16A16Sfloat;
+	case VK_FORMAT_R32G32_SFLOAT:
+		return Format::R32G32Sfloat;
+	case VK_FORMAT_R32G32B32_SFLOAT:
+		return Format::R32G32B32Sfloat;
+	case VK_FORMAT_R32G32B32A32_SFLOAT:
+		return Format::R32G32B32A32Sfloat;
+
+	/** Block */
+	case VK_FORMAT_BC1_RGB_UNORM_BLOCK:
+		return Format::Bc1RgbUnormBlock;
+	case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:
+		return Format::Bc1RgbaUnormBlock;
+	case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
+		return Format::Bc1RgbSrgbBlock;
+	case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:
+		return Format::Bc1RgbaSrgbBlock;
+
+	case VK_FORMAT_BC3_UNORM_BLOCK:
+		return Format::Bc3UnormBlock;
+	case VK_FORMAT_BC3_SRGB_BLOCK:
+		return Format::Bc3SrgbBlock;
+		
+	case VK_FORMAT_BC5_UNORM_BLOCK:
+		return Format::Bc5UnormBlock;
+	case VK_FORMAT_BC5_SNORM_BLOCK:
+		return Format::Bc5SnormBlock;
+		
+	case VK_FORMAT_BC6H_UFLOAT_BLOCK:
+		return Format::Bc6HUfloatBlock;
+	case VK_FORMAT_BC6H_SFLOAT_BLOCK:
+		return Format::Bc6HSfloatBlock;
+
+	case VK_FORMAT_BC7_UNORM_BLOCK:
+		return Format::Bc7UnormBlock;
+	case VK_FORMAT_BC7_SRGB_BLOCK:
+		return Format::Bc7SrgbBlock;
+	}
+}
 
 }

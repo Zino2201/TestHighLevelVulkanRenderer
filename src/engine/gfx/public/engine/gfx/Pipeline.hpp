@@ -2,6 +2,7 @@
 
 #include "engine/Flags.hpp"
 #include "engine/gfx/DeviceResource.hpp"
+#include "engine/Hash.hpp"
 
 namespace cb::gfx
 {
@@ -84,5 +85,24 @@ struct Viewport
 		const float in_max_depth = 1.f) : x(in_x), y(in_y),
 		width(in_width), height(in_height), min_depth(in_min_depth), max_depth(in_max_depth) {}
 };
+
+}
+
+namespace std
+{
+
+template<> struct hash<cb::gfx::PipelineShaderStage>
+{
+	uint64_t operator()(const cb::gfx::PipelineShaderStage& in_stage) const noexcept
+	{
+		uint64_t hash = 0;
+
+		cb::hash_combine(hash, in_stage.shader_stage);
+		cb::hash_combine(hash, in_stage.shader);
+		cb::hash_combine(hash, in_stage.entry_point);
+
+		return hash;
+	}
+};	
 
 }

@@ -22,6 +22,10 @@ public:
 	void present(const std::span<VkSemaphore>& in_wait_semaphores);
 
 	[[nodiscard]] const BackendDeviceResource& get_texture_view() const { return image_views[current_image]; }
+	[[nodiscard]] const std::vector<BackendDeviceResource>& get_textures() const { return images; }
+	[[nodiscard]] const std::vector<BackendDeviceResource>& get_texture_views() const { return image_views; }
+	[[nodiscard]] Format get_format() const { return convert_vk_format(swapchain.image_format); }
+	[[nodiscard]] uint32_t get_current_image_idx() const { return current_image; }
 private:
 	VulkanDevice& device;
 	vkb::Swapchain swapchain;

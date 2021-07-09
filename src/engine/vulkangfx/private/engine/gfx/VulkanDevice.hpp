@@ -123,23 +123,25 @@ public:
 	void new_frame() override;
 
 	cb::Result<BackendDeviceResource, Result> create_buffer(const BufferCreateInfo& in_create_info) override;
+	cb::Result<BackendDeviceResource, Result> create_texture(const TextureCreateInfo& in_create_info) override;
+	cb::Result<BackendDeviceResource, Result> create_texture_view(const TextureViewCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_swap_chain(const SwapChainCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_shader(const ShaderCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_gfx_pipeline(const GfxPipelineCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_render_pass(const RenderPassCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_command_pool(const CommandPoolCreateInfo& in_create_info) override;
-	cb::Result<BackendDeviceResource, Result> create_texture_view(const TextureViewCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_semaphore(const SemaphoreCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_fence(const FenceCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_pipeline_layout(const PipelineLayoutCreateInfo& in_create_info) override;
 	
 	void destroy_buffer(const BackendDeviceResource& in_buffer) override;
+	void destroy_texture(const BackendDeviceResource& in_texture) override;
+	void destroy_texture_view(const BackendDeviceResource& in_texture_view) override;
 	void destroy_swap_chain(const BackendDeviceResource& in_swap_chain) override;
 	void destroy_shader(const BackendDeviceResource& in_shader) override;
 	void destroy_pipeline(const BackendDeviceResource& in_pipeline) override;
 	void destroy_render_pass(const BackendDeviceResource& in_render_pass) override;
 	void destroy_command_pool(const BackendDeviceResource& in_command_pool) override;
-	void destroy_texture_view(const BackendDeviceResource& in_texture_view) override;
 	void destroy_semaphore(const BackendDeviceResource& in_semaphore) override;
 	void destroy_fence(const BackendDeviceResource& in_fence) override;
 	void destroy_pipeline_layout(const BackendDeviceResource& in_pipeline_layout) override;
@@ -169,14 +171,23 @@ public:
 	void cmd_end_render_pass(const BackendDeviceResource& in_list) override;
 	void cmd_set_viewports(const BackendDeviceResource& in_list, const uint32_t in_first_viewport, const std::span<Viewport>& in_viewports) override;
 	void cmd_set_scissors(const BackendDeviceResource& in_list, const uint32_t in_first_scissor, const std::span<Rect2D>& in_scissors) override;
+
+	void cmd_copy_buffer(const BackendDeviceResource& in_cmd_list, 
+		const BackendDeviceResource& in_src_buffer, 
+		const BackendDeviceResource& in_dst_buffer, 
+		const std::span<BufferCopyRegion>& in_regions) override;
+
 	void end_cmd_list(const BackendDeviceResource& in_list) override;
 
-	Result acquire_swapchain_image(const BackendDeviceResource& in_swapchain, 
+	std::pair<Result, uint32_t> acquire_swapchain_image(const BackendDeviceResource& in_swapchain, 
 		const BackendDeviceResource& in_signal_semaphore) override;
 	void present(const BackendDeviceResource& in_swapchain,
 		const std::span<BackendDeviceResource>& in_wait_semaphores) override;
-	BackendDeviceResource get_swapchain_backbuffer_view(const BackendDeviceResource& in_device) override;
-
+	const std::vector<BackendDeviceResource>& get_swapchain_backbuffer_views(const BackendDeviceResource& in_swapchain) override;
+	const std::vector<BackendDeviceResource>& get_swapchain_backbuffers(const BackendDeviceResource& in_swapchain) override;
+	BackendDeviceResource get_swapchain_backbuffer_view(const BackendDeviceResource& Swapchain) override;
+	Format get_swapchain_format(const BackendDeviceResource& in_swapchain) override;
+	
 	Result wait_for_fences(const std::span<BackendDeviceResource>& in_fences, 
 		const bool in_wait_for_all, 
 		const uint64_t in_timeout) override;

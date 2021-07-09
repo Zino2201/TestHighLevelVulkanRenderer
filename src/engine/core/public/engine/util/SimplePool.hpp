@@ -23,6 +23,8 @@ class SimplePool
 	using ChunkType = std::unique_ptr<T[], ChunkDeleter>;
 
 public:
+	SimplePool() : size(0) {}
+	
 	template<typename... Args>
 	T* allocate(Args&&... in_args)
 	{
@@ -49,11 +51,13 @@ public:
 		free_memory.pop_back();
 
 		new (ptr) T(std::forward<Args>(in_args)...);
+		size++;
 		return ptr;
 	}
 
 	void free(T* in_ptr)
 	{
+		size--;
 		in_ptr->~T();
 
 		if constexpr(ThreadSafe)
@@ -62,9 +66,18 @@ public:
 		free_memory.emplace_back(in_ptr);
 		delete in_ptr;
 	}
+
+	SimplePool(const SimplePool& in_other)
+	{
+		(void)(in_other);
+		// TODO: implement lol
+	}
+
+	[[nodiscard]] const size_t get_size() const { return size; }
 private:
 	std::vector<ChunkType> chunks;
 	std::vector<T*> free_memory;
+	size_t size;
 
 	struct NoMutex {};
 	[[no_unique_address]] std::conditional_t<ThreadSafe, std::mutex, NoMutex> mutex;

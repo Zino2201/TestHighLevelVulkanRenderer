@@ -4,6 +4,7 @@
 #include "Texture.hpp"
 #include <span>
 #include <variant>
+#include <algorithm>
 
 namespace cb::gfx
 {
@@ -66,7 +67,7 @@ struct AttachmentReference
 {
 	static constexpr uint32_t unused_attachment = ~0Ui32;
 
-	/** Index of the attachmenet (mirror RenderPassCreateInfo::attachments) */
+	/** Index of the attachment (mirror RenderPassCreateInfo::attachments) */
 	uint32_t attachment;
 
 	/** Attachment layout during the subpass */
@@ -159,7 +160,7 @@ union ClearValue
  */
 struct Framebuffer
 {
-	std::span<BackendDeviceResource> attachments;
+	std::vector<BackendDeviceResource> attachments;
 	uint32_t width;
 	uint32_t height;
 	uint32_t layers;
@@ -168,8 +169,14 @@ struct Framebuffer
 
 	bool operator==(const Framebuffer& other) const
 	{
-		return attachments.data() == other.attachments.data() &&
-			width == other.width &&
+		const size_t count = std::min<size_t>(attachments.size(), other.attachments.size());
+		for(size_t i = 0; i < count; ++i)
+		{
+			if(attachments[i] != other.attachments[i])
+				return false;
+		}
+		
+		return width == other.width &&
 			height == other.height;
 	}
 };
@@ -178,6 +185,73 @@ struct Framebuffer
 
 namespace std
 {
+
+
+template<> struct hash<cb::gfx::AttachmentDescription>
+{
+	uint64_t operator()(const cb::gfx::AttachmentDescription& in_description) const noexcept
+	{
+		uint64_t hash = 0;
+		cb::hash_combine(hash, in_description.format);
+		cb::hash_combine(hash, in_description.samples);
+		cb::hash_combine(hash, in_description.load_op);
+		cb::hash_combine(hash, in_description.store_op);
+		cb::hash_combine(hash, in_description.stencil_load_op);
+		cb::hash_combine(hash, in_description.stencil_store_op);
+		cb::hash_combine(hash, in_description.initial_layout);
+		cb::hash_combine(hash, in_description.final_layout);
+		return hash;
+	}
+};
+
+template<> struct hash<cb::gfx::AttachmentReference>
+{
+	uint64_t operator()(const cb::gfx::AttachmentReference& in_ref) const noexcept
+	{
+		uint64_t hash = 0;
+		cb::hash_combine(hash, in_ref.attachment);
+		cb::hash_combine(hash, in_ref.layout);
+		return hash;
+	}
+};
+
+template<> struct hash<cb::gfx::SubpassDescription>
+{
+	uint64_t operator()(const cb::gfx::SubpassDescription& in_subpass) const noexcept
+	{
+		uint64_t hash = 0;
+		for(const auto& attachment : in_subpass.input_attachments)
+			cb::hash_combine(hash, attachment);
+
+		for(const auto& attachment : in_subpass.color_attachments)
+			cb::hash_combine(hash, attachment);
+
+		for(const auto& attachment : in_subpass.resolve_attachments)
+			cb::hash_combine(hash, attachment);
+
+		cb::hash_combine(hash, in_subpass.depth_stencil_attachment);
+
+		for(const auto& attachment : in_subpass.resolve_attachments)
+			cb::hash_combine(hash, attachment);
+
+		return hash;
+	}
+};
+
+template<> struct hash<cb::gfx::RenderPassCreateInfo>
+{
+	uint64_t operator()(const cb::gfx::RenderPassCreateInfo& in_create_info) const noexcept
+	{
+		uint64_t hash = 0;
+		for(const auto& attachment : in_create_info.attachments)
+			cb::hash_combine(hash, attachment);
+
+		for(const auto& subpass : in_create_info.subpasses)
+			cb::hash_combine(hash, subpass);
+		
+		return hash;
+	}
+};
 
 template<> struct hash<cb::gfx::Framebuffer>
 {
@@ -194,6 +268,6 @@ template<> struct hash<cb::gfx::Framebuffer>
 
 		return hash;
 	}
-	};
+};
 
 }

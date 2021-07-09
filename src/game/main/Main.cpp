@@ -76,148 +76,68 @@ int main()
 	auto vert_shader = device->create_shader(ShaderCreateInfo({ (uint32_t*) vert_spv.data(), vert_spv.size() }));
 	auto frag_shader = device->create_shader(ShaderCreateInfo({ (uint32_t*) frag_spv.data(), frag_spv.size() }));
 
+	auto image_available_semaphore = device->create_semaphore(); 
+	auto render_finished_semaphore = device->create_semaphore(); 
+	std::array render_wait_semaphores = { image_available_semaphore.get_value() };
+	std::array present_wait_semaphores = { render_finished_semaphore.get_value() };
+	std::array render_finished_semaphores = { render_finished_semaphore.get_value() };
+
+	auto pipeline_layout = device->create_pipeline_layout(PipelineLayoutCreateInfo());
 	
-#if 0
-
-	auto swap = device.get_value()->create_swap_chain(gfx::SwapChainCreateInfo(win.get_native_handle(), 
-		1280, 
-		720));
-
-	auto buffer = device.get_value()->create_buffer(gfx::BufferCreateInfo(4, 
-		gfx::MemoryUsage::CpuToGpu,
-		gfx::BufferUsageFlags(gfx::BufferUsageFlagBits::VertexBuffer)));
-
-	
-	auto vert = device.get_value()->create_shader(
-		gfx::ShaderCreateInfo({ (uint32_t*) vert_spv.data(), vert_spv.size() }));
-
-	auto frag = device.get_value()->create_shader(
-		gfx::ShaderCreateInfo({ (uint32_t*) frag_spv.data(), frag_spv.size() }));
-
-	auto pool = device.get_value()->create_command_pool(gfx::CommandPoolCreateInfo { gfx::QueueType::Gfx });
-	auto lists = device.get_value()->allocate_command_lists(
-		pool.get_value(),
-		1);
-
-	auto list = lists.get_value()[0];
-
-	auto rp = device.get_value()->create_render_pass(
-		gfx::RenderPassCreateInfo(
-		{
-			gfx::AttachmentDescription(
-				gfx::Format::B8G8R8A8Unorm,
-				gfx::SampleCountFlagBits::Count1,
-				gfx::AttachmentLoadOp::Clear,
-				gfx::AttachmentStoreOp::Store,
-				gfx::AttachmentLoadOp::DontCare,
-				gfx::AttachmentStoreOp::DontCare,
-				gfx::TextureLayout::Undefined,
-				gfx::TextureLayout::Present)
-		},
-		{
-			gfx::SubpassDescription(
-				{},
-				{ gfx::AttachmentReference(0, gfx::TextureLayout::ColorAttachment) },
-				{},
-				{},
-				{})
-		}));
-
-	auto image_available_semaphore = device.get_value()->create_semaphore(gfx::SemaphoreCreateInfo());
-	auto render_finished_semaphore = device.get_value()->create_semaphore(gfx::SemaphoreCreateInfo());
-	auto fence = device.get_value()->create_fence(gfx::FenceCreateInfo(true));
-
-	auto pipeline_layout = device.get_value()->create_pipeline_layout(gfx::PipelineLayoutCreateInfo());
-
-	std::array color_states = {
-		gfx::PipelineColorBlendAttachmentState()
-	};
-	auto pipeline = device.get_value()->create_gfx_pipeline(
-		gfx::GfxPipelineCreateInfo(
-{
-			gfx::PipelineShaderStage(gfx::ShaderStageFlagBits::Vertex, vert.get_value(), "main" ),
-			gfx::PipelineShaderStage(gfx::ShaderStageFlagBits::Fragment, frag.get_value(), "main" ),
-			},
-			gfx::PipelineVertexInputStateCreateInfo(),
-			gfx::PipelineInputAssemblyStateCreateInfo(),
-			gfx::PipelineRasterizationStateCreateInfo(),
-			gfx::PipelineMultisamplingStateCreateInfo(),
-			gfx::PipelineDepthStencilStateCreateInfo(),
-			gfx::PipelineColorBlendStateCreateInfo(false, gfx::LogicOp::NoOp, color_states),
-			pipeline_layout.get_value(),
-			rp.get_value(),
-			0));
-#endif
 	while(!glfwWindowShouldClose(win.get_handle()))
 	{
 		glfwPollEvents();
 
+		device->acquire_swapchain_texture(swapchain.get_value(), image_available_semaphore.get_value());
 		device->new_frame();
 
 		auto list = device->allocate_cmd_list(QueueType::Gfx);
 
+		std::array clear_values = { ClearValue(ClearColorValue({1, 1, 0, 1})) };
+		std::array color_attachments = { device->get_swapchain_backbuffer_view(swapchain.get_value()) };
 		
-#if 0
-		device.get_value()->new_frame();
+		RenderPassInfo info;
+		info.render_area = Rect2D(0, 0, 1280, 720);
+		info.color_attachments = color_attachments;
+		info.clear_attachment_flags = 1 << 0;
+		info.store_attachment_flags = 1 << 0;
+		info.clear_values = clear_values;
+		
+		std::array color_attachments_refs = { 0Ui32 };
+		std::array subpasses = { RenderPassInfo::Subpass(color_attachments_refs,
+			{},
+			{},
+			RenderPassInfo::DepthStencilMode::ReadWrite) };
+		info.subpasses = subpasses;
+		device->cmd_begin_render_pass(list, info);
 
-		std::array fences = { fence.get_value() };
-		device.get_value()->wait_for_fences(fences);
-		device.get_value()->reset_fences(fences);
-		
-		auto ra = device.get_value()->acquire_swapchain_image(swap.get_value(),
-			image_available_semaphore.get_value());
-		if(ra != gfx::Result::Success)
-			continue;
-		
-		gfx::Framebuffer framebuffer;
-		framebuffer.width = 1280;
-		framebuffer.height = 720;
-		framebuffer.layers = 1;
-		std::array xd = { device.get_value()->get_swapchain_backbuffer_view(swap.get_value()) };
-		framebuffer.attachments = xd;
+		PipelineRenderPassState rp_state;
 
-		device.get_value()->reset_command_pool(pool.get_value());
-		
-		device.get_value()->begin_cmd_list(list);
+		std::array blends = { PipelineColorBlendAttachmentState() };
+		std::array shaders = {
+			PipelineShaderStage(gfx::ShaderStageFlagBits::Vertex, 
+			Device::get_backend_shader(vert_shader.get_value()), 
+			"main" ),
+			PipelineShaderStage(gfx::ShaderStageFlagBits::Fragment, 
+			Device::get_backend_shader(frag_shader.get_value()), 
+			"main" ),
+		};
 
-		std::array caca = { gfx::ClearValue(gfx::ClearColorValue({ 0, 0, 0, 1 })) };
-		device.get_value()->cmd_begin_render_pass(list, 
-			rp.get_value(),
-			framebuffer,
-			gfx::Rect2D(0, 0, 1280, 720),
-			caca);
-
-		std::array viewports = { gfx::Viewport(0, 0, 1280, 720) };
-		std::array scissors = { gfx::Rect2D(0, 0, 1280, 720) };
+		rp_state.color_blend.attachments = blends;
 		
-		device.get_value()->cmd_set_viewports(list, 0, viewports);
-		device.get_value()->cmd_set_scissors(list, 0, scissors);
-		device.get_value()->cmd_bind_pipeline(list,
-			gfx::PipelineBindPoint::Gfx,
-			pipeline.get_value());
-		device.get_value()->cmd_draw(list,
-			3,
-			1,
-			0,
-			0);
-		device.get_value()->cmd_end_render_pass(list);
-		device.get_value()->end_cmd_list(list);
-
-		std::array lists = { list };
-		std::array wait_semaphore_submit = { image_available_semaphore.get_value() };
-		std::array wait_semaphore_submit_flags = { gfx::PipelineStageFlags(gfx::PipelineStageFlagBits::TopOfPipe) };
-		std::array signaled_semaphore = { render_finished_semaphore.get_value() };
+		PipelineMaterialState mat_state;
+		mat_state.stages = shaders;
 		
-		device.get_value()->queue_submit(gfx::QueueType::Gfx,
-			lists,
-			wait_semaphore_submit,
-			wait_semaphore_submit_flags,
-			signaled_semaphore,
-			fence.get_value());
+		device->cmd_set_render_pass_state(list, rp_state);
+		device->cmd_set_material_state(list, mat_state);
+		device->cmd_bind_pipeline_layout(list, pipeline_layout.get_value());
+		device->cmd_draw(list, 3, 1, 0, 0);
+		device->cmd_end_render_pass(list);
 		
-		std::array wait_semaphore = { render_finished_semaphore.get_value() };
-		device.get_value()->present(swap.get_value(), wait_semaphore);
-#endif
+		device->submit(list, render_wait_semaphores, render_finished_semaphores);
+		device->end_frame();
+		
+		device->present(swapchain.get_value(), present_wait_semaphores);
 	}
 
 	

@@ -119,7 +119,7 @@ struct TextureCreateInfo
 	uint32_t depth;
 	uint32_t mip_levels;
 	uint32_t array_layers;
-	SampleCountFlags sample_count;
+	SampleCountFlagBits sample_count;
 	TextureUsageFlags usage_flags;
 	
 	explicit TextureCreateInfo(TextureType in_type = TextureType::Tex1D,

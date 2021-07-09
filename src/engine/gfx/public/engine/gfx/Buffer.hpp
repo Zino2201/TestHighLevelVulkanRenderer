@@ -13,6 +13,8 @@ enum class BufferUsageFlagBits
 	IndexBuffer = 1 << 1,
 	UniformBuffer = 1 << 2,
 	StorageBuffer = 1 << 3,
+	TransferSrc = 1 << 4,
+	TransferDst = 1 << 5,
 };
 CB_ENABLE_FLAG_ENUMS(BufferUsageFlagBits, BufferUsageFlags);
 	

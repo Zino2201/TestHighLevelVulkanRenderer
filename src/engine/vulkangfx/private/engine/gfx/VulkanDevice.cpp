@@ -64,7 +64,7 @@ VkFramebuffer VulkanDevice::FramebufferManager::get_or_create(VkRenderPass in_re
 		&create_info,
 		nullptr,
 		&framebuffer);
-	framebuffers.insert({ in_framebuffer, std::move(Entry(device, framebuffer)) });
+	framebuffers.insert({ in_framebuffer, Entry(device, framebuffer) });
 	
 	return framebuffer;
 }
@@ -118,6 +118,12 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_buffer(const Buff
 	
 	if(in_create_info.usage_flags & BufferUsageFlagBits::StorageBuffer)
 		buffer_create_info.usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+	
+	if(in_create_info.usage_flags & BufferUsageFlagBits::TransferSrc)
+		buffer_create_info.usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+	if(in_create_info.usage_flags & BufferUsageFlagBits::TransferDst)
+		buffer_create_info.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 	
 	VmaAllocationCreateInfo alloc_create_info = {};
 	alloc_create_info.flags = 0;
@@ -463,7 +469,7 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_command_pool(cons
 	VkCommandPoolCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	create_info.pNext = nullptr;
-	create_info.flags = 0;
+	create_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 	auto index = device_wrapper.device.get_queue_index(convert_queue_type(in_create_info.queue_type));
 	if(!index)
 	{
@@ -480,6 +486,41 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_command_pool(cons
 		return make_error(convert_result(result));
 
 	auto ret = new_resource<VulkanCommandPool>(*this, command_pool);
+	return make_result(ret.get());
+}
+
+cb::Result<BackendDeviceResource, Result> VulkanDevice::create_texture(const TextureCreateInfo& in_create_info)
+{
+	VkImageCreateInfo create_info = {};
+	create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	create_info.pNext = nullptr;
+	create_info.flags = 0;
+	create_info.imageType = convert_texture_type(in_create_info.type);
+	create_info.format = convert_format(in_create_info.format);
+	create_info.extent = { in_create_info.width, in_create_info.height, in_create_info.depth };
+	create_info.arrayLayers = in_create_info.array_layers;
+	create_info.mipLevels = in_create_info.mip_levels;
+	create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	create_info.samples = convert_sample_count_bit(in_create_info.sample_count);
+	create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+
+	VmaAllocationCreateInfo alloc_create_info = {};
+	alloc_create_info.flags = 0;
+	alloc_create_info.usage = convert_memory_usage(in_create_info.mem_usage);	
+	
+	VkImage image;
+	VmaAllocation allocation;
+	VkResult result = vmaCreateImage(allocator,
+		&create_info,
+		&alloc_create_info,
+		&image,
+		&allocation,
+		nullptr);
+	if(result != VK_SUCCESS)
+		return make_error(convert_result(result));
+
+	auto ret = new_resource<VulkanTexture>(*this, image, allocation);
 	return make_result(ret.get());
 }
 
@@ -697,6 +738,11 @@ void VulkanDevice::destroy_command_pool(const BackendDeviceResource& in_command_
 	free_resource<VulkanCommandPool>(in_command_pool);
 }
 
+void VulkanDevice::destroy_texture(const BackendDeviceResource& in_texture)
+{
+	free_resource<VulkanTexture>(in_texture);	
+}
+
 void VulkanDevice::destroy_texture_view(const BackendDeviceResource& in_texture_view)
 {
 	free_resource<VulkanTextureView>(in_texture_view);	
@@ -739,11 +785,12 @@ void VulkanDevice::unmap_buffer(const BackendDeviceResource& in_buffer)
 }
 
 /** Swapchain */
-Result VulkanDevice::acquire_swapchain_image(const BackendDeviceResource& in_swapchain,
+std::pair<Result, uint32_t> VulkanDevice::acquire_swapchain_image(const BackendDeviceResource& in_swapchain,
 	const BackendDeviceResource& in_signal_semaphore)
 {
 	VkSemaphore signal_semaphore = get_resource<VulkanSemaphore>(in_signal_semaphore)->get_semaphore();
-	return convert_result(get_resource<VulkanSwapChain>(in_swapchain)->acquire_image(signal_semaphore));
+	auto swapchain = get_resource<VulkanSwapChain>(in_swapchain);
+	return { convert_result(swapchain->acquire_image(signal_semaphore)), swapchain->get_current_image_idx() };
 }
 
 void VulkanDevice::present(const BackendDeviceResource& in_swapchain,
@@ -761,6 +808,21 @@ void VulkanDevice::present(const BackendDeviceResource& in_swapchain,
 BackendDeviceResource VulkanDevice::get_swapchain_backbuffer_view(const BackendDeviceResource& in_swap_chain)
 {
 	return get_resource<VulkanSwapChain>(in_swap_chain)->get_texture_view();
+}
+
+const std::vector<BackendDeviceResource>& VulkanDevice::get_swapchain_backbuffer_views(const BackendDeviceResource& in_swapchain)
+{
+	return get_resource<VulkanSwapChain>(in_swapchain)->get_texture_views();
+}
+
+const std::vector<BackendDeviceResource>& VulkanDevice::get_swapchain_backbuffers(const BackendDeviceResource& in_swapchain)
+{
+	return get_resource<VulkanSwapChain>(in_swapchain)->get_textures();
+}
+
+Format VulkanDevice::get_swapchain_format(const BackendDeviceResource& in_swapchain)
+{
+	return get_resource<VulkanSwapChain>(in_swapchain)->get_format();
 }
 
 /** Fences */
@@ -798,7 +860,7 @@ void VulkanDevice::begin_cmd_list(const BackendDeviceResource& in_list)
 	VkCommandBufferBeginInfo begin_info = {};
 	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	begin_info.pNext = nullptr;
-	begin_info.flags = 0;
+	begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 	begin_info.pInheritanceInfo = nullptr;
 	
 	vkBeginCommandBuffer(
@@ -876,6 +938,28 @@ void VulkanDevice::cmd_set_scissors(const BackendDeviceResource& in_list,
 		in_first_scissor,
 		static_cast<uint32_t>(in_scissors.size()),
 		reinterpret_cast<VkRect2D*>(in_scissors.data()));
+}
+
+void VulkanDevice::cmd_copy_buffer(const BackendDeviceResource& in_cmd_list, 
+	const BackendDeviceResource& in_src_buffer, 
+	const BackendDeviceResource& in_dst_buffer, 
+	const std::span<BufferCopyRegion>& in_regions)
+{
+	VkBuffer src_buffer = get_resource<VulkanBuffer>(in_src_buffer)->get_buffer();
+	VkBuffer dst_buffer = get_resource<VulkanBuffer>(in_dst_buffer)->get_buffer();
+
+	std::vector<VkBufferCopy> regions;
+	regions.reserve(in_regions.size());
+	for(const auto& region : in_regions)
+	{
+		regions.push_back({ region.src_offset, region.dst_offset, region.size} );
+	}
+	
+	vkCmdCopyBuffer(get_resource<VulkanCommandList>(in_cmd_list)->get_command_buffer(),
+		src_buffer,
+		dst_buffer,
+		static_cast<uint32_t>(regions.size()),
+		regions.data());
 }
 
 void VulkanDevice::end_cmd_list(const BackendDeviceResource& in_list)

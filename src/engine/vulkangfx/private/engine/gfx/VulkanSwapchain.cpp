@@ -1,5 +1,6 @@
 #include "engine/gfx/VulkanSwapChain.hpp"
 #include "engine/gfx/VulkanDevice.hpp"
+#include "engine/gfx/VulkanTexture.hpp"
 #include "engine/gfx/VulkanTextureView.hpp"
 
 namespace cb::gfx
@@ -10,6 +11,12 @@ VulkanSwapChain::VulkanSwapChain(VulkanDevice& in_device,
 
 VulkanSwapChain::~VulkanSwapChain()
 {
+	for(const auto& image : images)
+		free_resource<VulkanTexture>(image);
+
+	for(const auto& image_view : image_views)
+		free_resource<VulkanTextureView>(image_view);
+	
 	if(swapchain.swapchain)
 		vkb::destroy_swapchain(swapchain);
 }
@@ -33,6 +40,7 @@ VkResult VulkanSwapChain::create(const uint32_t in_width,
 		surface);
 
 	VkSurfaceFormatKHR format = {};
+	
 	format.colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
 	format.format = VK_FORMAT_B8G8R8A8_UNORM;
 	
@@ -56,6 +64,11 @@ VkResult VulkanSwapChain::create(const uint32_t in_width,
 	auto image_list = swapchain.get_images();
 	auto image_view_list = swapchain.get_image_views();
 
+	for(const auto& image : image_list.value())
+	{
+		images.push_back(new_resource<VulkanTexture>(device, image));
+	}
+	
 	for(const auto& image_view : image_view_list.value())
 	{
 		image_views.push_back(new_resource<VulkanTextureView>(device, image_view));
