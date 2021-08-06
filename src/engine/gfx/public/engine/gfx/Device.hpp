@@ -142,14 +142,6 @@ public:
 	~CommandPool();
 };
 
-class Pipeline : public BackendResourceWrapper
-{
-public:
-	Pipeline(Device& in_device,
-		const BackendDeviceResource& in_pipeline) : BackendResourceWrapper(in_device, in_pipeline) {}
-	~Pipeline();
-};
-
 class PipelineLayout : public BackendResourceWrapper
 {
 public:
@@ -199,7 +191,6 @@ template<> struct IsHandleCompatibleWith<TextureView, TextureViewHandle> : std::
 template<> struct IsHandleCompatibleWith<Swapchain, SwapchainHandle> : std::true_type {};
 template<> struct IsHandleCompatibleWith<Shader, ShaderHandle> : std::true_type {};
 template<> struct IsHandleCompatibleWith<CommandList, CommandListHandle> : std::true_type {};
-template<> struct IsHandleCompatibleWith<Pipeline, PipelineHandle> : std::true_type {};
 template<> struct IsHandleCompatibleWith<PipelineLayout, PipelineLayoutHandle> : std::true_type {};
 template<> struct IsHandleCompatibleWith<Fence, FenceHandle> : std::true_type {};
 template<> struct IsHandleCompatibleWith<Semaphore, SemaphoreHandle> : std::true_type {};
@@ -372,9 +363,14 @@ class Device final
 			gfx_command_pool.reset();
 			compute_command_pool.reset();
 		}
+
+		void destroy()
+		{
+			expired_fences.emplace_back(gfx_fence);
+		}
 	};
 public:
-	static constexpr size_t max_frames_in_flight = 1;
+	static constexpr size_t max_frames_in_flight = 2;
 
 	Device(Backend& in_backend, std::unique_ptr<BackendDevice>&& in_backend_device);
 	~Device();
@@ -394,7 +390,6 @@ public:
 	[[nodiscard]] cb::Result<FenceHandle, Result> create_fence(const FenceCreateInfo& in_create_info = {});
 	[[nodiscard]] cb::Result<ShaderHandle, Result> create_shader(const ShaderCreateInfo& in_create_info);
 	[[nodiscard]] cb::Result<PipelineLayoutHandle, Result> create_pipeline_layout(const PipelineLayoutCreateInfo& in_create_info);
-	[[nodiscard]] cb::Result<PipelineHandle, Result> create_gfx_pipeline(const GfxPipelineCreateInfo& in_create_info);
 
 	void destroy_buffer(const BufferHandle& in_buffer);
 	void destroy_texture(const TextureHandle& in_texture);
@@ -402,7 +397,6 @@ public:
 	void destroy_swapchain(const SwapchainHandle& in_swapchain);
 	void destroy_shader(const ShaderHandle& in_shader);
 	void destroy_pipeline_layout(const PipelineLayoutHandle& in_pipeline_layout);
-	void destroy_pipeline(const PipelineHandle& in_pipeline);
 	void destroy_fence(const FenceHandle& in_fence);
 	void destroy_semaphore(const SemaphoreHandle& in_semaphore);
 
@@ -479,7 +473,6 @@ private:
 	ThreadSafeSimplePool<detail::TextureView> texture_views;
 	ThreadSafeSimplePool<detail::Shader> shaders;
 	ThreadSafeSimplePool<detail::Swapchain> swapchains;
-	ThreadSafeSimplePool<detail::Pipeline> pipelines;
 	ThreadSafeSimplePool<detail::PipelineLayout> pipeline_layouts;
 	ThreadSafeSimplePool<detail::Fence> fences;
 	ThreadSafeSimplePool<detail::Semaphore> semaphores;
@@ -505,8 +498,8 @@ struct UniqueDeviceResource
 	using HandleType = DeviceResource<Type>;
 
 	UniqueDeviceResource() {}
-	UniqueDeviceResource(HandleType&& in_handle) : handle(in_handle) {}
-	~UniqueDeviceResource() { if(handle) deleter()(handle); }
+	UniqueDeviceResource(HandleType in_handle) : handle(in_handle) {}
+	~UniqueDeviceResource() { if(handle) Deleter()(handle); }
 
 	UniqueDeviceResource(const UniqueDeviceResource&) = delete;
 	void operator=(const UniqueDeviceResource&) = delete;
@@ -528,16 +521,27 @@ private:
 /**
  * Deleters
  */
-struct SwapchainDeleter
-{
-	void operator()(const SwapchainHandle& in_handle) const
-	{
-		get_device()->destroy_swapchain(in_handle);
-	}
-};
-	
+#define CB_GFX_DECLARE_SMART_DEVICE_RESOURCE(UpperCaseName, LowerCaseName, Type) \
+	namespace detail \
+	{ \
+	struct SmartDeleter_##UpperCaseName\
+	{ \
+		void operator()(Type in_handle) const \
+		{ \
+			get_device()->destroy_##LowerCaseName(in_handle); \
+		} \
+	}; \
+	} \
+	using Unique##UpperCaseName = detail::UniqueDeviceResource<DeviceResourceType::UpperCaseName, detail::SmartDeleter_##UpperCaseName>;
+
 }
 
-using UniqueSwapchain = detail::UniqueDeviceResource<DeviceResourceType::SwapChain, detail::SwapchainDeleter>;
-	
+CB_GFX_DECLARE_SMART_DEVICE_RESOURCE(Buffer, buffer, BufferHandle);
+CB_GFX_DECLARE_SMART_DEVICE_RESOURCE(Texture, texture, TextureHandle);
+CB_GFX_DECLARE_SMART_DEVICE_RESOURCE(TextureView, texture_view, TextureViewHandle);
+CB_GFX_DECLARE_SMART_DEVICE_RESOURCE(PipelineLayout, pipeline_layout, PipelineLayoutHandle);
+CB_GFX_DECLARE_SMART_DEVICE_RESOURCE(Shader, shader, ShaderHandle);
+CB_GFX_DECLARE_SMART_DEVICE_RESOURCE(Swapchain, swapchain, SwapchainHandle);
+CB_GFX_DECLARE_SMART_DEVICE_RESOURCE(Semaphore, semaphore, SemaphoreHandle);
+
 }

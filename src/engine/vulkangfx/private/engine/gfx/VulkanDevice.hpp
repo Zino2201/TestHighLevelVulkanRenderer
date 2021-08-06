@@ -53,7 +53,7 @@ class VulkanDevice final : public BackendDevice
 			auto surface = create_surface(in_os_handle);
 			if(!surface)
 			{
-				spdlog::error("Failed to create Vulkan surface: {}", surface.get_error());
+				logger::error(log_vulkan, "Failed to create Vulkan surface: {}", surface.get_error());
 				return make_error(Result::ErrorInitializationFailed);
 			}
 			

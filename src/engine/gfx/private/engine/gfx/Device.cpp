@@ -16,13 +16,13 @@ Buffer::~Buffer()
 
 Texture::~Texture()
 {
-	if(is_texture_from_swapchain())
+	if(!is_texture_from_swapchain())
 		device.get_backend_device()->destroy_texture(resource);
 }
 
 TextureView::~TextureView()
 {
-	if(texture.is_texture_from_swapchain())
+	if(!texture.is_texture_from_swapchain())
 		device.get_backend_device()->destroy_texture_view(resource);
 }
 
@@ -95,11 +95,6 @@ PipelineLayout::~PipelineLayout()
 	device.get_backend_device()->destroy_pipeline_layout(resource);
 }
 
-Pipeline::~Pipeline()
-{
-	device.get_backend_device()->destroy_pipeline(resource);
-}
-
 Shader::~Shader()
 {
 	device.get_backend_device()->destroy_shader(resource);
@@ -119,7 +114,35 @@ Device::Device(Backend& in_backend,
 
 Device::~Device()
 {
-	current_device = nullptr;	
+	for(auto& frame : frames)
+	{
+		if(!frame.wait_fences.empty())
+		{
+			wait_for_fences(frame.wait_fences);
+		}
+
+		frame.destroy();
+		frame.free_resources();
+		frame.reset();
+	}
+
+	for(auto& [create_info, pipeline] : gfx_pipelines)
+		get_backend_device()->destroy_pipeline(pipeline);
+
+	for(auto& [create_info, rp] : render_passes)
+		get_backend_device()->destroy_render_pass(rp);
+
+	CB_CHECKF(buffers.get_size() == 0, "Some resources have not been freed before deleting the device!");
+	CB_CHECKF(textures.get_size() == 0, "Some resources have not been freed before deleting the device!");
+	CB_CHECKF(texture_views.get_size() == 0, "Some resources have not been freed before deleting the device!");
+	CB_CHECKF(swapchains.get_size() == 0, "Some resources have not been freed before deleting the device!");
+	CB_CHECKF(pipeline_layouts.get_size() == 0, "Some resources have not been freed before deleting the device!");
+	CB_CHECKF(shaders.get_size() == 0, "Some resources have not been freed before deleting the device!");
+	CB_CHECKF(semaphores.get_size() == 0, "Some resources have not been freed before deleting the device!");
+	CB_CHECKF(fences.get_size() == 0, "Some resources have not been freed before deleting the device!");
+
+	/** We can't do this yet as some dtor depends on current_device (get_device()) */
+	//current_device = nullptr;	
 }
 
 Device::Frame::Frame() : gfx_command_pool(QueueType::Gfx),
@@ -127,34 +150,33 @@ Device::Frame::Frame() : gfx_command_pool(QueueType::Gfx),
 {
 	auto fence = get_device()->create_fence(FenceCreateInfo());
 	gfx_fence = fence.get_value();
-	max flight = 2, destroy/unique
 }
 
 void Device::Frame::free_resources()
 {
 	for(auto& buffer : expired_buffers)
-		get_device()->destroy_buffer(buffer);
+		get_device()->buffers.free(cast_handle<Buffer>(buffer));
 
 	for(auto& texture : expired_textures)
-		get_device()->destroy_texture(texture);
+		get_device()->textures.free(cast_handle<Texture>(texture));
 
 	for(auto& texture_view : expired_texture_views)
-		get_device()->destroy_texture_view(texture_view);
+		get_device()->texture_views.free(cast_handle<TextureView>(texture_view));
 
 	for(auto& shader : expired_shaders)
-		get_device()->destroy_shader(shader);
+		get_device()->shaders.free(cast_handle<Shader>(shader));
 
 	for(auto& pipeline_layout : expired_pipeline_layouts)
-		get_device()->destroy_pipeline_layout(pipeline_layout);
+		get_device()->pipeline_layouts.free(cast_handle<PipelineLayout>(pipeline_layout));
 
-	for(auto& pipeline : expired_pipelines)
-		get_device()->destroy_pipeline(pipeline);
-	
+	for(auto& swapchain : expired_swapchains)
+		get_device()->swapchains.free(cast_handle<Swapchain>(swapchain));
+
 	for(auto& fence : expired_fences)
-		get_device()->destroy_fence(fence);
+		get_device()->fences.free(cast_handle<Fence>(fence));
 	
 	for(auto& semaphore : expired_semaphores)
-		get_device()->destroy_semaphore(semaphore);
+		get_device()->semaphores.free(cast_handle<Semaphore>(semaphore));
 }
 
 void Device::new_frame()
@@ -354,59 +376,44 @@ cb::Result<PipelineLayoutHandle, Result> Device::create_pipeline_layout(const Pi
 	return make_result(cast_resource_ptr<PipelineLayoutHandle>(layout));
 }
 
-cb::Result<PipelineHandle, Result> Device::create_gfx_pipeline(const GfxPipelineCreateInfo& in_create_info)
-{
-	auto result = backend_device->create_gfx_pipeline(in_create_info);
-	if(!result)
-		return result.get_error();
-
-	auto pipeline = pipelines.allocate(*this, result.get_value());
-	return make_result(cast_resource_ptr<PipelineHandle>(pipeline));
-}
-
 void Device::destroy_buffer(const BufferHandle& in_buffer)
 {
-	buffers.free(cast_handle<Buffer>(in_buffer));
+	get_current_frame().expired_buffers.emplace_back(in_buffer);
 }
 
 void Device::destroy_texture(const TextureHandle& in_texture)
 {
-	textures.free(cast_handle<Texture>(in_texture));
+	get_current_frame().expired_textures.emplace_back(in_texture);
 }
 
 void Device::destroy_texture_view(const TextureViewHandle& in_texture_view)
 {
-	texture_views.free(cast_handle<TextureView>(in_texture_view));
+	get_current_frame().expired_texture_views.emplace_back(in_texture_view);
 }
 
 void Device::destroy_shader(const ShaderHandle& in_shader)
 {
-	shaders.free(cast_handle<Shader>(in_shader));	
+	get_current_frame().expired_shaders.emplace_back(in_shader);
 }
 
 void Device::destroy_swapchain(const SwapchainHandle& in_swapchain)
 {
-	swapchains.free(cast_handle<Swapchain>(in_swapchain));	
-}
-
-void Device::destroy_pipeline(const PipelineHandle& in_pipeline)
-{
-	pipelines.free(cast_handle<Pipeline>(in_pipeline));		
+	get_current_frame().expired_swapchains.emplace_back(in_swapchain);
 }
 
 void Device::destroy_pipeline_layout(const PipelineLayoutHandle& in_pipeline_layout)
 {
-	pipeline_layouts.free(cast_handle<PipelineLayout>(in_pipeline_layout));		
+	get_current_frame().expired_pipeline_layouts.emplace_back(in_pipeline_layout);
 }
 
 void Device::destroy_fence(const FenceHandle& in_fence)
 {
-	fences.free(cast_handle<Fence>(in_fence));			
+	get_current_frame().expired_fences.emplace_back(in_fence);
 }
 
 void Device::destroy_semaphore(const SemaphoreHandle& in_semaphore)
 {
-	semaphores.free(cast_handle<Semaphore>(in_semaphore));			
+	get_current_frame().expired_semaphores.emplace_back(in_semaphore);
 }
 
 CommandListHandle Device::allocate_cmd_list(const QueueType& in_type)

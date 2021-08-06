@@ -2,7 +2,7 @@
 
 #include "engine/Hash.hpp"
 #include "Texture.hpp"
-#include <span>
+#include <array>
 #include <variant>
 #include <algorithm>
 

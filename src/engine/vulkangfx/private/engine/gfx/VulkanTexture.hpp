@@ -109,6 +109,7 @@ inline VkImageType convert_texture_type(const TextureType& in_type)
 {
 	switch(in_type)
 	{
+	default:
 	case TextureType::Tex1D:
 		return VK_IMAGE_TYPE_1D;
 	case TextureType::Tex2D:

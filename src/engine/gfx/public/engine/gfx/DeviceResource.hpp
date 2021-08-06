@@ -21,7 +21,7 @@ enum class DeviceResourceType : uint8_t
 	CommandList,
 	Pipeline,
 	PipelineLayout,
-	SwapChain,
+	Swapchain,
 	Sampler,
 	Shader,
 	Fence,
@@ -62,7 +62,7 @@ using ShaderHandle = detail::DeviceResource<DeviceResourceType::Shader>;
 using CommandListHandle = detail::DeviceResource<DeviceResourceType::CommandList>;
 using PipelineLayoutHandle = detail::DeviceResource<DeviceResourceType::PipelineLayout>;
 using PipelineHandle = detail::DeviceResource<DeviceResourceType::Pipeline>;
-using SwapchainHandle = detail::DeviceResource<DeviceResourceType::SwapChain>;
+using SwapchainHandle = detail::DeviceResource<DeviceResourceType::Swapchain>;
 using FenceHandle = detail::DeviceResource<DeviceResourceType::Fence>;
 using SemaphoreHandle = detail::DeviceResource<DeviceResourceType::Semaphore>;
 

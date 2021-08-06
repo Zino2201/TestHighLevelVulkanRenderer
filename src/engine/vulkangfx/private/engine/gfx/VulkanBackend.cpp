@@ -35,13 +35,13 @@ VulkanBackend::VulkanBackend(const BackendFlags& in_flags)
 				default:
 					break;
 				case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-					spdlog::info("[{}] {}", type, callback_data->pMessage);
+					logger::info(log_vulkan, "[{}] {}", type, callback_data->pMessage);
 					break;
 				case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-					spdlog::warn("[{}] {}", type, callback_data->pMessage);
+					logger::warn(log_vulkan, "[{}] {}", type, callback_data->pMessage);
 					break;
 				case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-					spdlog::error("[{}] {}", type, callback_data->pMessage);
+					logger::error(log_vulkan, "[{}] {}", type, callback_data->pMessage);
 					/** temp fix */
 					if(std::string(callback_data->pMessage).find("nomad") == -1)
 						CB_DEBUGBREAK();
@@ -69,12 +69,16 @@ VulkanBackend::VulkanBackend(const BackendFlags& in_flags)
 VulkanBackend::~VulkanBackend()
 {
 	CB_CHECKF(alive_vulkan_objects == 0, "Some objects have not been destroyed!");
-	
+
+	logger::verbose(log_vulkan, "~VulkanBackend()");
+
 	vkb::destroy_instance(instance);
 }
 	
 cb::Result<std::unique_ptr<BackendDevice>, std::string> VulkanBackend::create_device(ShaderModel in_requested_shader_model)
 {
+	(void)(in_requested_shader_model);
+
 	vkb::PhysicalDevice physical_device;
 	
 	/** At this point we have an instance, let's try finding a suitable physical device */
@@ -91,7 +95,7 @@ cb::Result<std::unique_ptr<BackendDevice>, std::string> VulkanBackend::create_de
 
 		physical_device = result.value();
 
-		spdlog::info("Found suitable GPU \"{}\"", physical_device.properties.deviceName);
+		logger::info(log_vulkan, "Found suitable GPU \"{}\"", physical_device.properties.deviceName);
 	}
 
 	vkb::DeviceBuilder device_builder(physical_device);

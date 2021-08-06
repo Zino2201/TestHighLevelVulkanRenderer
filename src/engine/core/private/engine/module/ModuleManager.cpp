@@ -1,5 +1,6 @@
 #include "engine/module/ModuleManager.hpp"
 #include "engine/module/Module.hpp"
+#include <vector>
 #if CB_PLATFORM(WINDOWS)
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -34,7 +35,7 @@ Result<Module*, LoadModuleResult> load_module_shared(const std::string_view& in_
 			NULL);
 
 		std::string_view msg(buf, size);
-		spdlog::error("Failed to load module library {}: {}", path, msg);
+		logger::error("Failed to load module library {}: {}", path, msg);
 		LocalFree(buf);
 
 		return make_error(LoadModuleResult::NotFound);
@@ -74,7 +75,7 @@ Result<Module*, LoadModuleResult> load_module(const std::string_view& in_module_
 		return module.get_error();
 #endif
 
-	spdlog::debug("Loaded module {}", in_module_name);
+	logger::verbose("Loaded module {}", in_module_name);
 	
 	modules.emplace_back(module.get_value());
 	return module;

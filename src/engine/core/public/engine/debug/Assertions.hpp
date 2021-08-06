@@ -1,7 +1,7 @@
 #pragma once
 
 #include "engine/PlatformMacros.hpp"
-#include <spdlog/spdlog.h>
+#include "engine/logger/Logger.hpp"
 
 /** Portable __debugbreak */
 #if CB_COMPILER(MSVC)
@@ -16,17 +16,17 @@
 
 /** ASSERT/ASSETF */
 #if CB_BUILD(DEBUG)
-#define CB_ASSERT(condition) if(!(condition)) { spdlog::critical("Assertion failed: {} (File: {}, Line: {})", #condition, __FILE__, __LINE__); CB_DEBUGBREAK(); }
-#define CB_ASSERTF(condition, msg, ...) if(!(condition)) { spdlog::critical("Assertion failed: {} (File: {}, Line: {})", fmt::format(msg, __VA_ARGS__), __FILE__, __LINE__); CB_DEBUGBREAK(); }
+#define CB_ASSERT(condition) if(!(condition)) { logger::fatal("Assertion failed: {} (File: {}, Line: {})", #condition, __FILE__, __LINE__); CB_DEBUGBREAK(); }
+#define CB_ASSERTF(condition, msg, ...) if(!(condition)) { logger::fatal("Assertion failed: {} (File: {}, Line: {})", fmt::format(msg, __VA_ARGS__), __FILE__, __LINE__); CB_DEBUGBREAK(); }
 #else 
-#define CB_ASSERT(condition) if(!(condition)) { spdlog::critical("Assertion failed: {}", #condition); }
-#define CB_ASSERTF(condition, msg, ...) if(!(condition)) { spdlog::critical("Assertion failed: {} ({})", fmt::format(msg, __VA_ARGS__), #condition); }
+#define CB_ASSERT(condition) if(!(condition)) { logger::fatal("Assertion failed: {}", #condition); }
+#define CB_ASSERTF(condition, msg, ...) if(!(condition)) { logger::fatal("Assertion failed: {} ({})", fmt::format(msg, __VA_ARGS__), #condition); }
 #endif
 
 /** CHECK/CHECKF */
 #if CB_BUILD(DEBUG)
-#define CB_CHECK(condition) if(!(condition)) { spdlog::error("Check failed: {} (File: {}, Line: {})", #condition, __FILE__, __LINE__); CB_DEBUGBREAK(); }
-#define CB_CHECKF(condition, msg, ...) if(!(condition)) { spdlog::error("{} (File: {}, Line: {})", fmt::format(msg, __VA_ARGS__), __FILE__, __LINE__); CB_DEBUGBREAK(); }
+#define CB_CHECK(condition) if(!(condition)) { logger::error("Check failed: {} (File: {}, Line: {})", #condition, __FILE__, __LINE__); CB_DEBUGBREAK(); }
+#define CB_CHECKF(condition, msg, ...) if(!(condition)) { logger::error("{} (File: {}, Line: {})", fmt::format(msg, __VA_ARGS__), __FILE__, __LINE__); CB_DEBUGBREAK(); }
 #else
 #define CB_CHECK(condition)
 #define CB_CHECKF(condition, msg, ...)

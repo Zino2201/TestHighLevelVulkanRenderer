@@ -15,12 +15,15 @@
 #include "engine/gfx/Shader.hpp"
 #include "engine/gfx/Format.hpp"
 #include <atomic>
+#include "engine/logger/Logger.hpp"
 
 namespace cb::gfx
 {
 
 /** Debug counter used to track undeleted resources */
 inline static std::atomic_size_t alive_vulkan_objects = 0;
+
+CB_DEFINE_LOG_CATEGORY(vulkan);
 
 template<typename T>
 struct VulkanResourcePtr

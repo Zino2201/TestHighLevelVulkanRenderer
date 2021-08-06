@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <memory>
+#include <mutex>
 
 namespace cb
 {
@@ -24,6 +25,10 @@ class SimplePool
 
 public:
 	SimplePool() : size(0) {}
+	~SimplePool()
+	{
+		
+	}
 	
 	template<typename... Args>
 	T* allocate(Args&&... in_args)
@@ -64,7 +69,6 @@ public:
 			std::lock_guard<std::mutex> guard(mutex);
 		
 		free_memory.emplace_back(in_ptr);
-		delete in_ptr;
 	}
 
 	SimplePool(const SimplePool& in_other)
@@ -77,6 +81,7 @@ public:
 private:
 	std::vector<ChunkType> chunks;
 	std::vector<T*> free_memory;
+
 	size_t size;
 
 	struct NoMutex {};

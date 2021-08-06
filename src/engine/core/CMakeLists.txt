@@ -6,10 +6,13 @@ cb_add_module(core
 	public/engine/Result.hpp
 	public/engine/debug/Assertions.hpp
 	public/engine/logger/Logger.hpp
+	public/engine/logger/Sink.hpp
+	public/engine/logger/sinks/StdoutSink.hpp
 	public/engine/module/Module.hpp
 	public/engine/module/ModuleManager.hpp
 	public/engine/util/SimplePool.hpp
 	private/engine/logger/Logger.cpp
+	private/engine/logger/sinks/StdoutSink.cpp
 	private/engine/module/ModuleManager.cpp
 	private/engine/Core.cpp)
 target_include_directories(core PUBLIC public PRIVATE private)
@@ -22,4 +25,4 @@ else()
 	target_compile_definitions(core PUBLIC CB_MONOLITHIC=0)
 endif()
 target_compile_definitions(core PUBLIC "$<$<CONFIG:Debug>:CB_BUILD_PRIVATE_DEFINITION_DEBUG=1>$<$<CONFIG:RelWithDebInfo>:CB_BUILD_PRIVATE_DEFINITION_RELWITHDEBINFO=1>$<$<CONFIG:Release>:CB_BUILD_PRIVATE_DEFINITION_RELEASE=1>")
-target_link_libraries(core PUBLIC spdlog robin_hood::robin_hood)
+target_link_libraries(core PUBLIC robin_hood::robin_hood fmt)

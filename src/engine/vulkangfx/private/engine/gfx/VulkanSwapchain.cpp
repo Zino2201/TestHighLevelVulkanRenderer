@@ -51,7 +51,7 @@ VkResult VulkanSwapChain::create(const uint32_t in_width,
 		.build();
 	if(!result)
 	{
-		spdlog::error("Failed to create Vulkan swapchain: {}", result.error().message());
+		logger::error("Failed to create Vulkan swapchain: {}", result.error().message());
 		return VK_ERROR_INITIALIZATION_FAILED;
 	}
 

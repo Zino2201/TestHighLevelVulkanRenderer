@@ -4,19 +4,12 @@
       "name": "Debug",
       "generator": "Ninja",
       "configurationType": "Debug",
-      "inheritEnvironments": [ "msvc_x64" ],
-      "buildRoot": "${projectDir}\\build\\${name}",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
       "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
       "buildCommandArgs": "",
       "ctestCommandArgs": "",
-      "cmakeExecutable": "C:/Program Files/CMake/bin/cmake.exe",
-      "variables": [
-        {
-          "name": "CB_WITH_VULKAN",
-          "value": "True",
-          "type": "BOOL"
-        }
-      ],
+      "inheritEnvironments": [ "msvc_x64" ],
       "intelliSenseMode": "windows-msvc-x64"
     }
   ]

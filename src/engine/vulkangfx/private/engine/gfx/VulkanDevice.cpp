@@ -473,7 +473,7 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_command_pool(cons
 	auto index = device_wrapper.device.get_queue_index(convert_queue_type(in_create_info.queue_type));
 	if(!index)
 	{
-		spdlog::error("Failed to create Vulkan command pool: {}", index.error().message());
+		logger::error("Failed to create Vulkan command pool: {}", index.error().message());
 		return make_error(Result::ErrorInitializationFailed);
 	}
 	create_info.queueFamilyIndex = index.value();

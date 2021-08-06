@@ -58,6 +58,12 @@ public:
 	Result& operator=(const Result&) = default;
 	Result& operator=(Result&&) noexcept = default;
 
+	[[nodiscard]] const ValueType& get_value() const &
+	{
+		CB_CHECKF(value.index() == 0, "Value is not available!");
+		return std::get<0>(value);
+	}
+
 	[[nodiscard]] ValueType& get_value() &
 	{
 		CB_CHECKF(value.index() == 0, "Value is not available!");
@@ -67,7 +73,7 @@ public:
 	[[nodiscard]] ValueType&& get_value() &&
 	{
 		CB_CHECKF(value.index() == 0, "Value is not available!");
-		return std::get<0>(value);
+		return std::forward<ValueType>(std::get<0>(value));
 	}
 
 	[[nodiscard]] const ErrorType& get_error()
