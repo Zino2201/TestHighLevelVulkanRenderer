@@ -179,6 +179,11 @@ void Device::Frame::free_resources()
 		get_device()->semaphores.free(cast_handle<Semaphore>(semaphore));
 }
 
+void Device::wait_idle()
+{
+	backend_device->wait_idle();
+}
+
 void Device::new_frame()
 {
 	backend_device->new_frame();
@@ -670,6 +675,11 @@ void Device::present(const SwapchainHandle& in_swapchain,
 TextureViewHandle Device::get_swapchain_backbuffer_view(const SwapchainHandle& in_swapchain) const
 {
 	return cast_handle<Swapchain>(in_swapchain)->get_backbuffer_view();
+}
+
+BackendDeviceResource Device::get_swapchain_backend_handle(const SwapchainHandle& in_swapchain) const
+{
+	return cast_handle<Swapchain>(in_swapchain)->get_resource();
 }
 
 void Device::update_pipeline_state(CommandList* in_cmd_list)

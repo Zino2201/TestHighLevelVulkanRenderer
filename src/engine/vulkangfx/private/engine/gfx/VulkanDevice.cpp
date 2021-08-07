@@ -154,15 +154,34 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_swap_chain(const 
 	{
 		return make_error(surface.get_error());
 	}
-	
-	auto swapchain = new_resource<VulkanSwapChain>(*this, surface.get_value());
-	VkResult result = swapchain->create(in_create_info.width, in_create_info.height);
-	if(result != VK_SUCCESS)
+
+	/** Create swapchain */
+	VkSwapchainKHR old_swapchain = VK_NULL_HANDLE;
+	if(in_create_info.old_swapchain != null_backend_resource)
 	{
-		free_resource<VulkanSwapChain>(swapchain);
-		return make_error(convert_result(result));
+		old_swapchain = get_resource<VulkanSwapChain>(in_create_info.old_swapchain)->get_swapchain().swapchain;
 	}
+
+	vkb::SwapchainBuilder swapchain_builder(get_physical_device(),
+		get_device(),
+		surface.get_value());
+
+	VkSurfaceFormatKHR format = {};
+	format.colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+	format.format = VK_FORMAT_B8G8R8A8_UNORM;
 	
+	auto result = 
+		swapchain_builder.set_old_swapchain(old_swapchain)
+		.set_desired_extent(in_create_info.width, in_create_info.height)
+		.set_desired_format(format)
+		.build();
+	if(!result)
+	{
+		logger::error("Failed to create Vulkan swapchain: {}", result.error().message());
+		return make_error(convert_result(result.vk_result()));
+	}
+
+	auto swapchain = new_resource<VulkanSwapChain>(*this, result.value());
 	return static_cast<BackendDeviceResource>(swapchain);
 }
 

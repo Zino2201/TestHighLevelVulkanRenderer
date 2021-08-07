@@ -62,30 +62,47 @@ int main()
 
 	using namespace gfx;
 	
-	UniqueSwapchain swapchain = device->create_swapchain(gfx::SwapChainCreateInfo(
+	UniqueSwapchain swapchain(device->create_swapchain(gfx::SwapChainCreateInfo(
 		win.get_native_handle(),
-		1280,
-		720)).get_value();
+		win.get_width(),
+		win.get_height())).get_value());
+
+	win.get_window_resized().bind([&](uint32_t width, uint32_t height)
+	{
+		UniqueSwapchain old_swapchain(swapchain.free());
+
+		device->wait_idle();
+		swapchain = UniqueSwapchain(device->create_swapchain(gfx::SwapChainCreateInfo(
+			win.get_native_handle(),
+			width,
+			height,
+			device->get_swapchain_backend_handle(old_swapchain.get()))).get_value());
+	});
 
 	auto vert_spv = read_binary_file("vert.spv");
 	auto frag_spv = read_binary_file("frag.spv");
 
-	UniqueShader vert_shader = device->create_shader(ShaderCreateInfo({ (uint32_t*) vert_spv.data(), vert_spv.size() })).get_value();
-	UniqueShader frag_shader = device->create_shader(ShaderCreateInfo({ (uint32_t*) frag_spv.data(), frag_spv.size() })).get_value();
+	UniqueShader vert_shader(device->create_shader(ShaderCreateInfo(
+		{ (uint32_t*) vert_spv.data(), vert_spv.size() })).get_value());
+	UniqueShader frag_shader(device->create_shader(ShaderCreateInfo(
+		{ (uint32_t*) frag_spv.data(), frag_spv.size() })).get_value());
 
-	UniqueSemaphore image_available_semaphore = device->create_semaphore().get_value(); 
-	UniqueSemaphore render_finished_semaphore = device->create_semaphore().get_value(); 
+	UniqueSemaphore image_available_semaphore(device->create_semaphore().get_value()); 
+	UniqueSemaphore render_finished_semaphore(device->create_semaphore().get_value()); 
 	std::array render_wait_semaphores = { image_available_semaphore.get() };
 	std::array present_wait_semaphores = { render_finished_semaphore.get() };
 	std::array render_finished_semaphores = { render_finished_semaphore.get() };
 
-	UniquePipelineLayout pipeline_layout = device->create_pipeline_layout(PipelineLayoutCreateInfo()).get_value();
+	UniquePipelineLayout pipeline_layout(device->create_pipeline_layout(PipelineLayoutCreateInfo()).get_value());
 	
 	while(!glfwWindowShouldClose(win.get_handle()))
 	{
 		glfwPollEvents();
 
-		device->acquire_swapchain_texture(swapchain.get(), image_available_semaphore.get());
+		if(device->acquire_swapchain_texture(swapchain.get(), 
+			image_available_semaphore.get()) != gfx::Result::Success)
+			continue;
+
 		device->new_frame();
 
 		auto list = device->allocate_cmd_list(QueueType::Gfx);
@@ -94,7 +111,7 @@ int main()
 		std::array color_attachments = { device->get_swapchain_backbuffer_view(swapchain.get()) };
 		
 		RenderPassInfo info;
-		info.render_area = Rect2D(0, 0, 1280, 720);
+		info.render_area = Rect2D(0, 0, win.get_width(), win.get_height());
 		info.color_attachments = color_attachments;
 		info.clear_attachment_flags = 1 << 0;
 		info.store_attachment_flags = 1 << 0;

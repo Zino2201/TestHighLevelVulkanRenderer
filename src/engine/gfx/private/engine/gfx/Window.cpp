@@ -5,12 +5,17 @@
 #endif
 #include <GLFW/glfw3native.h>
 
-#include "engine/gfx/Pipeline.hpp"
-#include "engine/gfx/GfxPipeline.hpp"
-#include "engine/gfx/RenderPass.hpp"
-
 namespace cb
 {
+
+void on_window_size_changed(GLFWwindow* glfw_window, int width, int height)
+{
+	auto window = static_cast<Window*>(glfwGetWindowUserPointer(glfw_window));
+	window->width = width;
+	window->height = height;
+	window->window_resized_delegate.call(static_cast<uint32_t>(width),
+		static_cast<uint32_t>(height));
+}
 
 Window::Window(const uint32_t in_width,
 	const uint32_t in_height,
@@ -22,6 +27,11 @@ Window::Window(const uint32_t in_width,
 		"CityBuilder", 
 		nullptr, 
 		nullptr);
+
+	glfwSetWindowUserPointer(window, this);
+
+	/** Binds callbacks */
+	glfwSetWindowSizeCallback(window, &on_window_size_changed);
 
 	if(flags & WindowFlagBits::Centered)
 	{
@@ -46,7 +56,7 @@ void* Window::get_native_handle() const
 #if CB_PLATFORM(WINDOWS)
 	return glfwGetWin32Window(window);
 #else
-	ZE_ASSERTF(false, "Unsupported platform");
+	CB_ASSERTF(false, "Unsupported platform");
 #endif
 }
 

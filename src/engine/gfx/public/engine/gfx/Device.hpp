@@ -127,8 +127,14 @@ public:
 		const BackendDeviceResource& in_swapchain);
 	~Swapchain();
 
+	void reset_handles();
+
+	[[nodiscard]] TextureHandle get_backbuffer() const { return textures[current_image]; }
 	[[nodiscard]] TextureViewHandle get_backbuffer_view() const { return views[current_image]; }
 private:
+	void destroy();
+private:
+	SwapChainCreateInfo create_info;
 	std::vector<TextureHandle> textures;
 	std::vector<TextureViewHandle> views;
 	uint32_t current_image;
@@ -378,6 +384,7 @@ public:
 	Device(const Device&) = delete;	 
 	void operator=(const Device&) = delete;
 
+	void wait_idle();
 	void new_frame();
 	void end_frame();
 	void submit(CommandListHandle in_cmd_list, 
@@ -430,7 +437,8 @@ public:
 	void present(const SwapchainHandle& in_swapchain,
 		const std::span<SemaphoreHandle>& in_wait_semaphores = {});
 	TextureViewHandle get_swapchain_backbuffer_view(const SwapchainHandle& in_swapchain) const;
-	
+	BackendDeviceResource get_swapchain_backend_handle(const SwapchainHandle& in_swapchain) const;
+
 	template<typename T>
 	[[nodiscard]] static T* cast_handle(const auto& in_handle)
 		requires detail::IsHandleCompatibleWith<T, std::decay_t<decltype(in_handle)>>::value
@@ -498,11 +506,35 @@ struct UniqueDeviceResource
 	using HandleType = DeviceResource<Type>;
 
 	UniqueDeviceResource() {}
-	UniqueDeviceResource(HandleType in_handle) : handle(in_handle) {}
-	~UniqueDeviceResource() { if(handle) Deleter()(handle); }
+	explicit UniqueDeviceResource(HandleType in_handle) { reset(in_handle); }
+	~UniqueDeviceResource() { destroy(); }
 
 	UniqueDeviceResource(const UniqueDeviceResource&) = delete;
 	void operator=(const UniqueDeviceResource&) = delete;
+
+	UniqueDeviceResource(UniqueDeviceResource&& other) noexcept
+	{
+		reset(std::exchange(other.handle, HandleType()));
+	}
+
+	UniqueDeviceResource& operator=(UniqueDeviceResource&& other) noexcept
+	{
+		reset(std::exchange(other.handle, HandleType()));
+		return *this;
+	}
+
+	HandleType free()
+	{
+		HandleType freed_handle = handle;
+		handle = HandleType();
+		return freed_handle;
+	}
+
+	void reset(const HandleType& in_new_handle = HandleType())
+	{
+		destroy();
+		handle = in_new_handle;
+	}
 
 	HandleType get() const
 	{
@@ -512,6 +544,15 @@ struct UniqueDeviceResource
 	HandleType operator*() const
 	{
 		return handle;
+	}
+private:
+	void destroy()
+	{
+		if(handle)
+		{
+			Deleter()(handle);
+			handle = HandleType();
+		}
 	}
 private:
 	HandleType handle;

@@ -37,7 +37,8 @@ public:
 	BackendDevice& operator=(BackendDevice&&) noexcept = default;
 
 	virtual void new_frame() = 0;
-	
+	virtual void wait_idle() = 0;
+
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_buffer(const BufferCreateInfo& in_create_info) = 0;
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_texture(const TextureCreateInfo& in_create_info) = 0;
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_texture_view(const TextureViewCreateInfo& in_create_info) = 0;

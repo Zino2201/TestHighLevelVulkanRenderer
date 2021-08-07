@@ -12,11 +12,8 @@ class VulkanSwapChain final
 {
 public:
 	VulkanSwapChain(VulkanDevice& in_device,
-		VkSurfaceKHR in_surface);
+		const vkb::Swapchain& in_swapchain);
 	~VulkanSwapChain();
-
-	VkResult create(const uint32_t in_width, 
-		const uint32_t in_height);
 
 	[[nodiscard]] VkResult acquire_image(VkSemaphore in_signal_semaphore);
 	void present(const std::span<VkSemaphore>& in_wait_semaphores);
@@ -26,6 +23,7 @@ public:
 	[[nodiscard]] const std::vector<BackendDeviceResource>& get_texture_views() const { return image_views; }
 	[[nodiscard]] Format get_format() const { return convert_vk_format(swapchain.image_format); }
 	[[nodiscard]] uint32_t get_current_image_idx() const { return current_image; }
+	[[nodiscard]] const vkb::Swapchain& get_swapchain() const { return swapchain; }
 private:
 	VulkanDevice& device;
 	vkb::Swapchain swapchain;

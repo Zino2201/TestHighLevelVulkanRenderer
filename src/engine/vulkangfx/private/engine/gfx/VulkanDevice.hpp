@@ -121,6 +121,10 @@ public:
 	~VulkanDevice() override;
 
 	void new_frame() override;
+	void wait_idle() override
+	{
+		vkDeviceWaitIdle(get_device());
+	}
 
 	cb::Result<BackendDeviceResource, Result> create_buffer(const BufferCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_texture(const TextureCreateInfo& in_create_info) override;
@@ -185,7 +189,7 @@ public:
 		const std::span<BackendDeviceResource>& in_wait_semaphores) override;
 	const std::vector<BackendDeviceResource>& get_swapchain_backbuffer_views(const BackendDeviceResource& in_swapchain) override;
 	const std::vector<BackendDeviceResource>& get_swapchain_backbuffers(const BackendDeviceResource& in_swapchain) override;
-	BackendDeviceResource get_swapchain_backbuffer_view(const BackendDeviceResource& Swapchain) override;
+	BackendDeviceResource get_swapchain_backbuffer_view(const BackendDeviceResource& in_swapchain) override;
 	Format get_swapchain_format(const BackendDeviceResource& in_swapchain) override;
 	
 	Result wait_for_fences(const std::span<BackendDeviceResource>& in_fences, 

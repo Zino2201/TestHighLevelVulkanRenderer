@@ -3,6 +3,7 @@ cb_add_module(core
 	public/engine/Flags.hpp
 	public/engine/PlatformMacros.hpp
 	public/engine/Hash.hpp
+	public/engine/MulticastDelegate.hpp
 	public/engine/Result.hpp
 	public/engine/debug/Assertions.hpp
 	public/engine/logger/Logger.hpp

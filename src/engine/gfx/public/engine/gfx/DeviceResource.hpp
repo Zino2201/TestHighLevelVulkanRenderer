@@ -42,6 +42,20 @@ struct DeviceResource
 
 	constexpr explicit DeviceResource(const uint64_t in_handle = null) noexcept : handle(in_handle) {}
 
+	constexpr DeviceResource(const DeviceResource& in_handle) : handle(in_handle.get_handle()) {}
+	constexpr DeviceResource& operator=(const DeviceResource& in_handle)
+	{
+		handle = in_handle.get_handle();
+		return *this;
+	}
+
+	constexpr DeviceResource(DeviceResource&& in_handle) noexcept : handle(std::exchange(in_handle.handle, null)) {}
+	constexpr DeviceResource& operator=(DeviceResource&& in_handle) noexcept
+	{
+		handle = std::exchange(in_handle.handle, null);
+		return *this;
+	}
+
 	constexpr bool operator==(const DeviceResource& in_other) const noexcept { return handle == in_other.handle; }
 	constexpr bool operator!=(const DeviceResource& in_other) const noexcept { return handle != in_other.handle; }
 
