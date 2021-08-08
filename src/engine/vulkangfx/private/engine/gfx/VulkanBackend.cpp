@@ -42,9 +42,7 @@ VulkanBackend::VulkanBackend(const BackendFlags& in_flags)
 					break;
 				case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
 					logger::error(log_vulkan, "[{}] {}", type, callback_data->pMessage);
-					/** temp fix */
-					if(std::string(callback_data->pMessage).find("nomad") == -1)
-						CB_DEBUGBREAK();
+					CB_DEBUGBREAK();
 					break;
 				}
 				

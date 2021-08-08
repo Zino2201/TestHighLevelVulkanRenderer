@@ -10,6 +10,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #endif
+#include <glm/gtc/matrix_transform.hpp>
 
 std::vector<char> read_binary_file(const std::string& in_name)
 {
@@ -24,6 +25,42 @@ std::vector<char> read_binary_file(const std::string& in_name)
 
 	return buffer;
 }
+
+#include <glm/glm.hpp>
+
+using namespace cb::gfx;
+struct Vertex
+{
+	glm::vec2 position;
+	glm::vec3 color;
+
+	static VertexInputBindingDescription get_binding_description()
+	{
+		return VertexInputBindingDescription(0, sizeof(Vertex), VertexInputRate::Vertex);		
+	}
+
+	static std::vector<VertexInputAttributeDescription> get_attribute_descriptions()
+	{
+		return
+		{
+			VertexInputAttributeDescription(0, 0, Format::R32G32Sfloat, offsetof(Vertex, position)),
+			VertexInputAttributeDescription(1, 0, Format::R32G32B32Sfloat, offsetof(Vertex, color)),
+		};
+	}
+};
+
+struct UBO
+{
+	glm::mat4 model;
+	glm::mat4 view;
+	glm::mat4 proj;
+};
+
+const std::vector<Vertex> vertices = {
+    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+};
 
 int main()
 {
@@ -93,8 +130,25 @@ int main()
 	std::array present_wait_semaphores = { render_finished_semaphore.get() };
 	std::array render_finished_semaphores = { render_finished_semaphore.get() };
 
-	UniquePipelineLayout pipeline_layout(device->create_pipeline_layout(PipelineLayoutCreateInfo()).get_value());
-	
+	std::array<DescriptorSetLayoutCreateInfo, 1> layouts;
+	std::vector<DescriptorSetLayoutBinding> bindings =
+	{
+		DescriptorSetLayoutBinding(0, DescriptorType::UniformBuffer, 1, ShaderStageFlags(ShaderStageFlagBits::Vertex))
+	};
+
+	layouts[0].bindings = bindings;
+	UniquePipelineLayout pipeline_layout(device->create_pipeline_layout(PipelineLayoutCreateInfo(layouts)).get_value());
+
+	/** Buffer */
+	UniqueBuffer vertex_buffer(device->create_buffer(BufferInfo(BufferCreateInfo(
+		sizeof(Vertex) * vertices.size(),
+		MemoryUsage::GpuOnly,
+		BufferUsageFlags(BufferUsageFlagBits::VertexBuffer)), 
+		{ (uint8_t*) vertices.data(), vertices.size() * sizeof(Vertex) })).get_value());
+
+
+	UniqueBuffer ubo(device->create_buffer(BufferInfo::make_ubo(sizeof(UBO))).get_value());
+
 	while(!glfwWindowShouldClose(win.get_handle()))
 	{
 		glfwPollEvents();
@@ -104,6 +158,24 @@ int main()
 			continue;
 
 		device->new_frame();
+
+		static auto start_time = std::chrono::high_resolution_clock::now();
+		auto current_time = std::chrono::high_resolution_clock::now();
+		float delta_time = std::chrono::duration<float, std::chrono::seconds::period>(current_time - start_time).count();
+
+		UBO ubo_data;
+		ubo_data.model = glm::rotate(glm::mat4(1.f), delta_time * glm::radians(90.f), glm::vec3(0.f, 0.f, 1.f));
+	ubo_data.view = glm::lookAt(glm::vec3(2.f, 2.f, 2.f),
+		glm::vec3(0.f, 0.f, 0.f),
+		glm::vec3(0.f, 0.f, 1.f));
+	ubo_data.proj = glm::perspective(glm::radians(90.f),
+		(float) win.get_width() / win.get_height(),
+		0.f,
+		1000.f);
+	ubo_data.proj[1][1] *= -1;
+		auto ubo_map = device->map_buffer(ubo.get());
+		memcpy(ubo_map.get_value(), &ubo_data, sizeof(ubo_data));
+		device->unmap_buffer(ubo.get());
 
 		auto list = device->allocate_cmd_list(QueueType::Gfx);
 
@@ -141,11 +213,15 @@ int main()
 		
 		PipelineMaterialState mat_state;
 		mat_state.stages = shaders;
-		
+		mat_state.vertex_input.input_binding_descriptions = { Vertex::get_binding_description() };
+		mat_state.vertex_input.input_attribute_descriptions = Vertex::get_attribute_descriptions();
+
 		device->cmd_set_render_pass_state(list, rp_state);
 		device->cmd_set_material_state(list, mat_state);
 		device->cmd_bind_pipeline_layout(list, pipeline_layout.get());
-		device->cmd_draw(list, 6, 1, 0, 0);
+		device->cmd_bind_vertex_buffer(list, vertex_buffer.get(), 0);
+		device->cmd_bind_ubo(list, 0, 0, ubo.get());
+		device->cmd_draw(list, 3, 1, 0, 0);
 		device->cmd_end_render_pass(list);
 		device->submit(list, render_wait_semaphores, render_finished_semaphores);
 		device->end_frame();

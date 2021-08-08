@@ -82,7 +82,12 @@ public:
 	[[nodiscard]] virtual const std::vector<BackendDeviceResource>& get_swapchain_backbuffers(const BackendDeviceResource& in_swapchain) = 0;
 	[[nodiscard]] virtual const std::vector<BackendDeviceResource>& get_swapchain_backbuffer_views(const BackendDeviceResource& in_swapchain) = 0;
 	[[nodiscard]] virtual Format get_swapchain_format(const BackendDeviceResource& in_swapchain) = 0;
-	
+
+	/** Pipeline layout */
+	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> allocate_descriptor_set(const BackendDeviceResource& in_pipeline_layout,
+		const uint32_t in_set,
+		const std::span<Descriptor, max_bindings>& in_descriptors) = 0;
+
 	/** Commands */
 	virtual void begin_cmd_list(const BackendDeviceResource& in_list) = 0;
 	virtual void cmd_begin_render_pass(const BackendDeviceResource& in_list,
@@ -100,6 +105,13 @@ public:
 		const uint32_t in_first_instance) = 0;
 	virtual void cmd_end_render_pass(const BackendDeviceResource& in_list) = 0;
 
+	virtual void cmd_bind_descriptor_sets(const BackendDeviceResource in_list,
+		const BackendDeviceResource in_pipeline_layout,
+		const std::span<BackendDeviceResource> in_descriptor_sets) = 0;
+	virtual void cmd_bind_vertex_buffers(const BackendDeviceResource& in_list,
+		const uint32_t in_first_binding,
+		const std::span<BackendDeviceResource> in_buffers,
+		const std::span<uint64_t> in_offsets) = 0;
 	virtual void cmd_set_viewports(const BackendDeviceResource& in_list,
 		const uint32_t in_first_viewport,
 		const std::span<Viewport>& in_viewports) = 0;

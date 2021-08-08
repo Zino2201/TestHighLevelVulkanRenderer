@@ -9,7 +9,7 @@ namespace cb::gfx
 {
 
 class VulkanSwapChain;
-	
+
 class VulkanDevice final : public BackendDevice
 {
 	struct DeviceWrapper
@@ -149,7 +149,11 @@ public:
 	void destroy_semaphore(const BackendDeviceResource& in_semaphore) override;
 	void destroy_fence(const BackendDeviceResource& in_fence) override;
 	void destroy_pipeline_layout(const BackendDeviceResource& in_pipeline_layout) override;
-	
+
+	cb::Result<BackendDeviceResource, Result> allocate_descriptor_set(const BackendDeviceResource& in_pipeline_layout,
+		const uint32_t in_set,
+		const std::span<Descriptor, max_bindings>& in_descriptors) override;
+
 	cb::Result<void*, Result> map_buffer(const BackendDeviceResource& in_buffer) override;
 	void unmap_buffer(const BackendDeviceResource& in_buffer) override;
 
@@ -173,6 +177,13 @@ public:
 		const uint32_t in_first_vertex,
 		const uint32_t in_first_instance) override;
 	void cmd_end_render_pass(const BackendDeviceResource& in_list) override;
+	void cmd_bind_descriptor_sets(const BackendDeviceResource in_list, 
+		const BackendDeviceResource in_pipeline_layout, 
+		const std::span<BackendDeviceResource> in_descriptor_sets) override;
+	void cmd_bind_vertex_buffers(const BackendDeviceResource& in_list, 
+		const uint32_t in_first_binding, 
+		const std::span<BackendDeviceResource> in_buffers, 
+		const std::span<uint64_t> in_offsets) override;
 	void cmd_set_viewports(const BackendDeviceResource& in_list, const uint32_t in_first_viewport, const std::span<Viewport>& in_viewports) override;
 	void cmd_set_scissors(const BackendDeviceResource& in_list, const uint32_t in_first_scissor, const std::span<Rect2D>& in_scissors) override;
 

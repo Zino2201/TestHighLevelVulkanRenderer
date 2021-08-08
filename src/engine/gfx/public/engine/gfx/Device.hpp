@@ -163,7 +163,10 @@ class CommandList : public BackendResourceWrapper
 public:
 	CommandList(Device& in_device,
 		const BackendDeviceResource& in_list,
-		const QueueType& in_type) : BackendResourceWrapper(in_device, in_list), type(in_type), pipeline_state_dirty(false) {}
+		const QueueType& in_type) : BackendResourceWrapper(in_device, in_list),
+		type(in_type), pipeline_state_dirty(false), dirty_sets_mask(0) {}
+
+	void update_descriptors();
 
 	[[nodiscard]] QueueType get_queue_type() const { return type; }
 private:
@@ -173,6 +176,8 @@ private:
 	PipelineRenderPassState render_pass_state;
 	PipelineMaterialState material_state;
 	bool pipeline_state_dirty;
+	std::array<std::array<Descriptor, max_bindings>, max_descriptor_sets> descriptors;
+	uint8_t dirty_sets_mask;
 };
 
 class Fence : public BackendResourceWrapper
@@ -261,7 +266,7 @@ struct BufferInfo
 	{
 		return BufferInfo(BufferCreateInfo(in_size, 
 			MemoryUsage::CpuOnly, 
-			BufferUsageFlags(BufferUsageFlagBits::UniformBuffer)),
+			BufferUsageFlags()),
 			in_initial_data);
 	}
 	
@@ -346,7 +351,8 @@ class Device final
 		std::vector<CommandListHandle> gfx_lists;
 		std::vector<SemaphoreHandle> gfx_wait_semaphores;
 		std::vector<SemaphoreHandle> gfx_signal_semaphores;
-		
+		bool gfx_submitted;
+
 		Frame();
 
 		void free_resources();
@@ -360,14 +366,18 @@ class Device final
 			expired_pipeline_layouts.clear();
 			expired_pipelines.clear();
 
+			/** Only reset commands if there are been submissions since we may have command lists created in game startup */
+			//if(gfx_submitted)
+				gfx_command_pool.reset();
+
 			gfx_lists.clear();
 			gfx_wait_semaphores.clear();
 			gfx_signal_semaphores.clear();
+			gfx_submitted = false;
+
+			compute_command_pool.reset();
 
 			wait_fences.clear();
-
-			gfx_command_pool.reset();
-			compute_command_pool.reset();
 		}
 
 		void destroy()
@@ -383,7 +393,7 @@ public:
 	
 	Device(const Device&) = delete;	 
 	void operator=(const Device&) = delete;
-
+	
 	void wait_idle();
 	void new_frame();
 	void end_frame();
@@ -391,7 +401,7 @@ public:
 		const std::span<SemaphoreHandle>& in_wait_semaphores = {},
 		const std::span<SemaphoreHandle>& in_signal_semaphores = {});
 	
-	[[nodiscard]] cb::Result<BufferHandle, Result> create_buffer(const BufferInfo& in_create_info);
+	[[nodiscard]] cb::Result<BufferHandle, Result> create_buffer(BufferInfo in_create_info);
 	[[nodiscard]] cb::Result<SwapchainHandle, Result> create_swapchain(const SwapChainCreateInfo& in_create_info);
 	[[nodiscard]] cb::Result<SemaphoreHandle, Result> create_semaphore(const SemaphoreCreateInfo& in_create_info = {});
 	[[nodiscard]] cb::Result<FenceHandle, Result> create_fence(const FenceCreateInfo& in_create_info = {});
@@ -406,6 +416,9 @@ public:
 	void destroy_pipeline_layout(const PipelineLayoutHandle& in_pipeline_layout);
 	void destroy_fence(const FenceHandle& in_fence);
 	void destroy_semaphore(const SemaphoreHandle& in_semaphore);
+
+	cb::Result<void*, Result> map_buffer(const BufferHandle& in_handle);
+	void unmap_buffer(const BufferHandle& in_handle);
 
 	[[nodiscard]] CommandListHandle allocate_cmd_list(const QueueType& in_type);
 
@@ -423,6 +436,9 @@ public:
 		const uint32_t in_first_vertex,
 		const uint32_t in_first_index);
 	void cmd_end_render_pass(const CommandListHandle& in_cmd_list);
+	void cmd_bind_vertex_buffer(const CommandListHandle& in_cmd_list,
+		const BufferHandle& in_buffer,
+		const uint64_t in_offset);
 	void cmd_copy_buffer(const CommandListHandle& in_cmd_list,
 		const BufferHandle& in_src_buffer,
 		const BufferHandle& in_dst_buffer,
@@ -430,7 +446,11 @@ public:
 	void cmd_set_render_pass_state(const CommandListHandle& in_cmd_list, const PipelineRenderPassState& in_state);
 	void cmd_set_material_state(const CommandListHandle& in_cmd_list, const PipelineMaterialState& in_state);
 	void cmd_bind_pipeline_layout(const CommandListHandle& in_cmd_list, const PipelineLayoutHandle& in_handle);
-	
+	void cmd_bind_ubo(const CommandListHandle& in_cmd_list, const uint32_t in_set, const uint32_t in_binding, 
+		const BufferHandle& in_handle);
+	void cmd_bind_texture_view(const CommandListHandle& in_cmd_list, const uint32_t in_set, const uint32_t in_binding, 
+		const TextureViewHandle& in_handle);
+
 	/** Swapchain */
 	Result acquire_swapchain_texture(const SwapchainHandle& in_swapchain,
 		const SemaphoreHandle& in_signal_semaphore = SemaphoreHandle());

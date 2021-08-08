@@ -42,6 +42,7 @@ CommandListHandle ThreadedCommandPool::Pool::allocate_cmd_list()
 			1);
 		const auto& cmd_list = command_lists.emplace_back(std::make_unique<CommandList>(*get_device(), 
 			result.get_value()[0], type));
+		free_command_list++;
 		return Device::cast_resource_ptr<CommandListHandle, CommandList>(cmd_list.get());
 	}
 }

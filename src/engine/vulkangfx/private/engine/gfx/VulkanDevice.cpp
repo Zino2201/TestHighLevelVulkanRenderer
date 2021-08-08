@@ -85,7 +85,10 @@ VulkanDevice::VulkanDevice(VulkanBackend& in_backend, vkb::Device&& in_device) :
 	vmaCreateAllocator(&create_info, &allocator);
 }
 	
-VulkanDevice::~VulkanDevice() = default;
+VulkanDevice::~VulkanDevice()
+{
+	vmaDestroyAllocator(allocator);
+}
 
 void VulkanDevice::new_frame()
 {
@@ -131,17 +134,18 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_buffer(const Buff
 	
 	VmaAllocation allocation;
 	VkBuffer handle;
-	
+	VmaAllocationInfo alloc_info;
+
 	VkResult result = vmaCreateBuffer(allocator, 
 		&buffer_create_info, 
 		&alloc_create_info,
 		&handle,
 		&allocation,
-		nullptr);
+		&alloc_info);
 	if(result != VK_SUCCESS)
 		return make_error(convert_result(result));
 
-	auto buffer = new_resource<VulkanBuffer>(*this, handle, allocation);
+	auto buffer = new_resource<VulkanBuffer>(*this, handle, allocation, alloc_info);
 	return make_result(buffer.get());
 }
 	
@@ -258,7 +262,7 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_gfx_pipeline(cons
 
 	vertex_input_state.vertexBindingDescriptionCount = static_cast<uint32_t>(bindings.size());
 	vertex_input_state.pVertexBindingDescriptions = bindings.data();
-	vertex_input_state.vertexAttributeDescriptionCount = static_cast<uint32_t>(bindings.size());
+	vertex_input_state.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributes.size());
 	vertex_input_state.pVertexAttributeDescriptions = attributes.data();
 
 	VkPipelineInputAssemblyStateCreateInfo input_assembly_state = {};
@@ -620,6 +624,7 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_pipeline_layout(c
 		for(const auto& binding : set.bindings)
 		{
 			VkDescriptorSetLayoutBinding info = {};
+			info.descriptorType = convert_descriptor_type(binding.type);
 			info.stageFlags = convert_shader_stage_flags(binding.stage);
 			info.descriptorCount = binding.count;
 			info.binding = binding.binding;
@@ -639,8 +644,7 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_pipeline_layout(c
 			&create_info,
 			nullptr,
 			&set_layout);
-		
-		
+
 		set_layouts.emplace_back(set_layout);		
 	}
 
@@ -671,7 +675,7 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_pipeline_layout(c
 	if(result != VK_SUCCESS)
 		return make_error(convert_result(result));
 
-	auto ret = new_resource<VulkanPipelineLayout>(*this, layout);
+	auto ret = new_resource<VulkanPipelineLayout>(*this, layout, set_layouts);
 	return make_result(ret.get());
 }
 
@@ -725,6 +729,13 @@ void VulkanDevice::reset_command_pool(const BackendDeviceResource& in_pool)
 	vkResetCommandPool(get_device(),
 		get_resource<VulkanCommandPool>(in_pool)->get_command_pool(),
 		0);	
+}
+
+cb::Result<BackendDeviceResource, Result> VulkanDevice::allocate_descriptor_set(const BackendDeviceResource& in_pipeline_layout,
+	const uint32_t in_set,
+	const std::span<Descriptor, max_bindings>& in_descriptors)
+{
+	return make_result(get_resource<VulkanPipelineLayout>(in_pipeline_layout)->allocate_set(in_set, in_descriptors));
 }
 
 void VulkanDevice::destroy_buffer(const BackendDeviceResource& in_buffer)
@@ -937,6 +948,38 @@ void VulkanDevice::cmd_draw(const BackendDeviceResource& in_list,
 void VulkanDevice::cmd_end_render_pass(const BackendDeviceResource& in_list)
 {
 	vkCmdEndRenderPass(get_resource<VulkanCommandList>(in_list)->get_command_buffer());
+}
+
+void VulkanDevice::cmd_bind_descriptor_sets(const BackendDeviceResource in_list, 
+	const BackendDeviceResource in_pipeline_layout, 
+	const std::span<BackendDeviceResource> in_descriptor_sets)
+{
+	vkCmdBindDescriptorSets(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+		VK_PIPELINE_BIND_POINT_GRAPHICS,
+		get_resource<VulkanPipelineLayout>(in_pipeline_layout)->get_pipeline_layout(),
+		0,
+		static_cast<uint32_t>(in_descriptor_sets.size()),
+		reinterpret_cast<VkDescriptorSet*>(in_descriptor_sets.data()),
+		0,
+		nullptr);
+}
+
+void VulkanDevice::cmd_bind_vertex_buffers(const BackendDeviceResource& in_list, 
+	const uint32_t in_first_binding, 
+	const std::span<BackendDeviceResource> in_buffers, 
+	const std::span<uint64_t> in_offsets)
+{
+	std::vector<VkBuffer> buffers;
+	buffers.reserve(in_buffers.size());
+
+	for(const auto& buffer : in_buffers)
+		buffers.emplace_back(get_resource<VulkanBuffer>(buffer)->get_buffer());
+
+	vkCmdBindVertexBuffers(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+		in_first_binding,
+		static_cast<uint32_t>(buffers.size()),
+		buffers.data(),
+		in_offsets.data());
 }
 
 void VulkanDevice::cmd_set_viewports(const BackendDeviceResource& in_list, 

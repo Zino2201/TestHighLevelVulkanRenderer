@@ -100,6 +100,31 @@ Shader::~Shader()
 	device.get_backend_device()->destroy_shader(resource);
 }
 
+void CommandList::update_descriptors()
+{
+	if(dirty_sets_mask == 0)
+		return;
+
+	auto layout = Device::cast_handle<PipelineLayout>(pipeline_layout);
+
+	std::vector<BackendDeviceResource> sets;
+	sets.reserve(max_descriptor_sets);
+	for(uint32_t i = 0; i < max_descriptor_sets; ++i)
+	{
+		if(dirty_sets_mask & (1 << i))
+		{
+			auto result = device.get_backend_device()->allocate_descriptor_set(layout->get_resource(),
+				i,
+				descriptors[i]);
+			sets.emplace_back(result.get_value());
+		}
+	}
+
+	device.get_backend_device()->cmd_bind_descriptor_sets(resource,
+		layout->get_resource(),
+		sets);
+}
+
 /** Device */
 
 Device::Device(Backend& in_backend, 
@@ -253,6 +278,7 @@ void Device::submit_queue(const QueueType& in_type)
 		fence = get_current_frame().gfx_fence;
 		wait_semaphores_handles = &get_current_frame().gfx_wait_semaphores;
 		signal_semaphores_handles = &get_current_frame().gfx_signal_semaphores;
+		get_current_frame().gfx_submitted = true;
 		break;
 	default:
 		break;
@@ -293,8 +319,9 @@ void Device::submit_queue(const QueueType& in_type)
 	}
 }
 
-cb::Result<BufferHandle, Result> Device::create_buffer(const BufferInfo& in_create_info)
+cb::Result<BufferHandle, Result> Device::create_buffer(BufferInfo in_create_info)
 {
+	in_create_info.info.usage_flags |= BufferUsageFlagBits::TransferSrc | BufferUsageFlagBits::TransferDst;
 	auto result = backend_device->create_buffer(in_create_info.info);
 	if(!result)
 		return result.get_error();
@@ -309,12 +336,15 @@ cb::Result<BufferHandle, Result> Device::create_buffer(const BufferInfo& in_crea
 			auto staging = create_buffer(BufferInfo::make_staging(in_create_info.info.size,
 				in_create_info.initial_data));
 			if(!staging)
+			{
+				destroy_buffer(handle);
 				return result.get_error();
+			}
 
 			auto list = allocate_cmd_list(QueueType::Gfx);
 
 			std::array regions = { BufferCopyRegion(0, 0, in_create_info.info.size) };
-			cmd_copy_buffer(list, handle, staging.get_value(), regions);
+			cmd_copy_buffer(list, staging.get_value(), handle, regions);
 			destroy_buffer(staging.get_value());
 			submit(list);
 		}
@@ -322,7 +352,11 @@ cb::Result<BufferHandle, Result> Device::create_buffer(const BufferInfo& in_crea
 		{
 			auto map = backend_device->map_buffer(result.get_value());
 			if(!map)
+			{
+				destroy_buffer(handle);
 				return make_error(map.get_error());
+			}
+
 			memcpy(map.get_value(), in_create_info.initial_data.data(), in_create_info.initial_data.size());
 			backend_device->unmap_buffer(result.get_value());
 		}
@@ -419,6 +453,16 @@ void Device::destroy_fence(const FenceHandle& in_fence)
 void Device::destroy_semaphore(const SemaphoreHandle& in_semaphore)
 {
 	get_current_frame().expired_semaphores.emplace_back(in_semaphore);
+}
+
+cb::Result<void*, Result> Device::map_buffer(const BufferHandle& in_handle)
+{
+	return backend_device->map_buffer(cast_handle<Buffer>(in_handle)->get_resource());	
+}
+
+void Device::unmap_buffer(const BufferHandle& in_handle)
+{
+	backend_device->unmap_buffer(cast_handle<Buffer>(in_handle)->get_resource());	
 }
 
 CommandListHandle Device::allocate_cmd_list(const QueueType& in_type)
@@ -592,7 +636,10 @@ void Device::cmd_draw(const CommandListHandle& in_cmd_list,
 	auto list = cast_handle<CommandList>(in_cmd_list);
 	if(list->pipeline_state_dirty)
 		update_pipeline_state(list);
-	
+	// TODO: refactor this (update_pipeline_state) to CommandList
+
+	list->update_descriptors();
+
 	backend_device->cmd_draw(list->get_resource(),
 		in_vertex_count,
 		in_instance_count,
@@ -625,9 +672,42 @@ void Device::cmd_bind_pipeline_layout(const CommandListHandle& in_cmd_list,
 	list->pipeline_layout = in_handle;
 }
 
+void Device::cmd_bind_ubo(const CommandListHandle& in_cmd_list, 
+	const uint32_t in_set, 
+	const uint32_t in_binding, 
+	const BufferHandle& in_handle)
+{
+	auto list = cast_handle<CommandList>(in_cmd_list);
+	list->descriptors[in_set][in_binding] = Descriptor::make_buffer_info(DescriptorType::UniformBuffer,
+		in_binding,
+		cast_handle<Buffer>(in_handle)->get_resource());
+	list->dirty_sets_mask = 1 << in_set;
+}
+
+void Device::cmd_bind_texture_view(const CommandListHandle& in_cmd_list, 
+	const uint32_t in_set, 
+	const uint32_t in_binding, 
+	const TextureViewHandle& in_handle)
+{
+	auto list = cast_handle<CommandList>(in_cmd_list);
+	list->descriptors[in_set][in_binding] = Descriptor::make_texture_view_info(in_binding,
+		cast_handle<TextureView>(in_handle)->get_resource());
+	list->dirty_sets_mask = 1 << in_set;
+}
+
 void Device::cmd_end_render_pass(const CommandListHandle& in_cmd_list)
 {
 	backend_device->cmd_end_render_pass(cast_handle<CommandList>(in_cmd_list)->get_resource());
+}
+
+void Device::cmd_bind_vertex_buffer(const CommandListHandle& in_cmd_list, const BufferHandle& in_buffer, const uint64_t in_offset)
+{
+	std::array buffers = { cast_handle<Buffer>(in_buffer)->get_resource() };
+	std::array offsets = { in_offset };
+	backend_device->cmd_bind_vertex_buffers(cast_handle<CommandList>(in_cmd_list)->get_resource(),
+		0,
+		buffers,
+		offsets);	
 }
 
 void Device::cmd_copy_buffer(const CommandListHandle& in_cmd_list, 
