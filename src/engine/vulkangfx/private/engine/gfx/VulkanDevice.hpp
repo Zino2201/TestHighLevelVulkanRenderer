@@ -4,6 +4,8 @@
 #include "Vulkan.hpp"
 #include "engine/gfx/VulkanBackend.hpp"
 #include <robin_hood.h>
+#include "VulkanDescriptorSet.hpp"
+#include "engine/containers/SparseArray.hpp"
 
 namespace cb::gfx
 {
@@ -187,10 +189,18 @@ public:
 	void cmd_set_viewports(const BackendDeviceResource& in_list, const uint32_t in_first_viewport, const std::span<Viewport>& in_viewports) override;
 	void cmd_set_scissors(const BackendDeviceResource& in_list, const uint32_t in_first_scissor, const std::span<Rect2D>& in_scissors) override;
 
+	void cmd_pipeline_barrier(const BackendDeviceResource in_list, const PipelineStageFlags in_src_flags, 
+		const PipelineStageFlags in_dst_flags, 
+		const std::span<TextureMemoryBarrier>& in_texture_memory_barriers) override;
 	void cmd_copy_buffer(const BackendDeviceResource& in_cmd_list, 
 		const BackendDeviceResource& in_src_buffer, 
 		const BackendDeviceResource& in_dst_buffer, 
 		const std::span<BufferCopyRegion>& in_regions) override;
+	void cmd_copy_buffer_to_texture(const BackendDeviceResource in_list,
+		const BackendDeviceResource in_src_buffer,
+		const BackendDeviceResource in_dst_texture,
+		const TextureLayout in_dst_layout,
+		const std::span<BufferTextureCopyRegion>& in_copy_regions);
 
 	void end_cmd_list(const BackendDeviceResource& in_list) override;
 
@@ -215,7 +225,9 @@ public:
 		const std::span<PipelineStageFlags>& in_wait_pipeline_stages = {},
 		const std::span<BackendDeviceResource>& in_signal_semaphores = {},
 		const BackendDeviceResource& in_fence = null_backend_resource) override;
-	
+
+	void free_descriptor_set_allocator(const size_t in_idx) { descriptor_set_allocators.remove(in_idx); }
+
 	[[nodiscard]] VulkanBackend& get_backend() const { return backend; }
 	[[nodiscard]] VkDevice get_device() const { return device_wrapper.device.device; }
 	[[nodiscard]] VkPhysicalDevice get_physical_device() const { return device_wrapper.device.physical_device.physical_device; }
@@ -227,6 +239,7 @@ private:
 	DeviceWrapper device_wrapper;
 	SurfaceManager surface_manager;
 	FramebufferManager framebuffer_manager;
+	SparseArray<VulkanDescriptorSetAllocator> descriptor_set_allocators;
 };
 	
 }

@@ -278,6 +278,36 @@ struct BufferInfo
 	}
 };
 
+struct TextureInfo
+{
+	TextureCreateInfo info;
+
+	/** Mip0 initial data */
+	std::span<uint8_t> initial_data;
+
+	explicit TextureInfo(const TextureCreateInfo& in_info,
+		const std::span<uint8_t>& in_initial_data = {}) : info(in_info),
+		initial_data(in_initial_data) {}
+
+	static TextureInfo make_immutable_2d(const uint32_t in_width, 
+		const uint32_t in_height,
+		const Format in_format, const uint32_t in_mip_levels = 1, 
+		const TextureUsageFlags in_usage_flags = TextureUsageFlags(TextureUsageFlagBits::Sampled),
+		const std::span<uint8_t>& in_initial_data = {})
+	{
+		return TextureInfo(TextureCreateInfo(TextureType::Tex2D,
+			MemoryUsage::GpuOnly,
+			in_format,
+			in_width,
+			in_height,
+			1,
+			in_mip_levels,
+			1,
+			SampleCountFlagBits::Count1,
+			in_usage_flags), in_initial_data);
+	}
+};
+
 /**
  * Informations about a render pass
  */
@@ -402,6 +432,7 @@ public:
 		const std::span<SemaphoreHandle>& in_signal_semaphores = {});
 	
 	[[nodiscard]] cb::Result<BufferHandle, Result> create_buffer(BufferInfo in_create_info);
+	[[nodiscard]] cb::Result<TextureHandle, Result> create_texture(TextureInfo in_create_info);
 	[[nodiscard]] cb::Result<SwapchainHandle, Result> create_swapchain(const SwapChainCreateInfo& in_create_info);
 	[[nodiscard]] cb::Result<SemaphoreHandle, Result> create_semaphore(const SemaphoreCreateInfo& in_create_info = {});
 	[[nodiscard]] cb::Result<FenceHandle, Result> create_fence(const FenceCreateInfo& in_create_info = {});
@@ -443,9 +474,26 @@ public:
 		const BufferHandle& in_src_buffer,
 		const BufferHandle& in_dst_buffer,
 		const std::span<BufferCopyRegion>& in_regions);
+	void cmd_copy_buffer_to_texture(const CommandListHandle& in_cmd_list,
+		const BufferHandle& in_src_buffer,
+		const TextureHandle& in_dst_texture,
+		const TextureLayout in_dst_layout,
+		const std::span<BufferTextureCopyRegion>& in_regions);
+	void cmd_texture_barrier(const CommandListHandle& in_cmd_list,
+		const TextureHandle& in_texture,
+		const PipelineStageFlags in_src_flags,
+		const TextureLayout in_src_layout,
+		const AccessFlags in_src_access_flags,
+		const PipelineStageFlags in_dst_flags,
+		const TextureLayout in_dst_layout,
+		const AccessFlags in_dst_access_flags);
+
+	/** Pipeline management */
+	void cmd_bind_pipeline_layout(const CommandListHandle& in_cmd_list, const PipelineLayoutHandle& in_handle);
 	void cmd_set_render_pass_state(const CommandListHandle& in_cmd_list, const PipelineRenderPassState& in_state);
 	void cmd_set_material_state(const CommandListHandle& in_cmd_list, const PipelineMaterialState& in_state);
-	void cmd_bind_pipeline_layout(const CommandListHandle& in_cmd_list, const PipelineLayoutHandle& in_handle);
+
+	/** Descriptor management */
 	void cmd_bind_ubo(const CommandListHandle& in_cmd_list, const uint32_t in_set, const uint32_t in_binding, 
 		const BufferHandle& in_handle);
 	void cmd_bind_texture_view(const CommandListHandle& in_cmd_list, const uint32_t in_set, const uint32_t in_binding, 

@@ -27,7 +27,9 @@
 #if CB_BUILD(DEBUG)
 #define CB_CHECK(condition) if(!(condition)) { logger::error("Check failed: {} (File: {}, Line: {})", #condition, __FILE__, __LINE__); CB_DEBUGBREAK(); }
 #define CB_CHECKF(condition, msg, ...) if(!(condition)) { logger::error("{} (File: {}, Line: {})", fmt::format(msg, __VA_ARGS__), __FILE__, __LINE__); CB_DEBUGBREAK(); }
+#define CB_UNREACHABLE() CB_CHECKF(true, "Reached unreacheable code!");
 #else
 #define CB_CHECK(condition)
 #define CB_CHECKF(condition, msg, ...)
+#define CB_UNREACHABLE()
 #endif

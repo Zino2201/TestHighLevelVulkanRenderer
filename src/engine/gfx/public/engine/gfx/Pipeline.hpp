@@ -3,6 +3,7 @@
 #include "engine/Flags.hpp"
 #include "engine/gfx/DeviceResource.hpp"
 #include "engine/Hash.hpp"
+#include "Texture.hpp"
 
 namespace cb::gfx
 {
@@ -84,6 +85,46 @@ struct Viewport
 		const float in_min_depth = 0.f,
 		const float in_max_depth = 1.f) : x(in_x), y(in_y),
 		width(in_width), height(in_height), min_depth(in_min_depth), max_depth(in_max_depth) {}
+};
+
+/** Barrier related structures */
+enum class AccessFlagBits
+{
+	TransferRead = 1 << 0,
+	TransferWrite = 1 << 1,
+	ShaderRead = 1 << 2,
+	ShaderWrite = 1 << 3,
+	HostRead = 1 << 4,
+	HostWrite = 1 << 5,
+	MemoryRead = 1 << 6,
+	MemoryWrite = 1 << 7,
+	ColorAttachmentRead = 1 << 8,
+	ColorAttachmentWrite = 1 << 9,
+	DepthStencilAttachmentRead = 1 << 10,
+	DepthStencilAttachmentWrite = 1 << 11,
+	InputAttachmentRead = 1 << 11,
+	UniformRead = 1 << 12,
+};
+CB_ENABLE_FLAG_ENUMS(AccessFlagBits, AccessFlags);
+
+struct TextureMemoryBarrier
+{
+	BackendDeviceResource texture;
+	AccessFlags src_access_flags;
+	AccessFlags dst_access_flags;
+	TextureLayout old_layout;
+	TextureLayout new_layout;
+	TextureSubresourceRange subresource_range;
+
+	TextureMemoryBarrier(const BackendDeviceResource in_texture,
+		AccessFlags in_src_access_flags,
+		AccessFlags in_dst_access_flags,
+		TextureLayout in_old_layout,
+		TextureLayout in_new_layout,
+		const TextureSubresourceRange& in_subresource_range) :
+		texture(in_texture), src_access_flags(in_src_access_flags), dst_access_flags(in_dst_access_flags),
+		old_layout(in_old_layout), new_layout(in_new_layout),
+		subresource_range(in_subresource_range) {}
 };
 
 }

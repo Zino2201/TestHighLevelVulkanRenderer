@@ -51,9 +51,7 @@ struct Vertex
 
 struct UBO
 {
-	glm::mat4 model;
-	glm::mat4 view;
-	glm::mat4 proj;
+	glm::mat4 wvp;
 };
 
 const std::vector<Vertex> vertices = {
@@ -163,16 +161,18 @@ int main()
 		auto current_time = std::chrono::high_resolution_clock::now();
 		float delta_time = std::chrono::duration<float, std::chrono::seconds::period>(current_time - start_time).count();
 
-		UBO ubo_data;
-		ubo_data.model = glm::rotate(glm::mat4(1.f), delta_time * glm::radians(90.f), glm::vec3(0.f, 0.f, 1.f));
-	ubo_data.view = glm::lookAt(glm::vec3(2.f, 2.f, 2.f),
+		glm::mat4 model = glm::rotate(glm::mat4(1.f), delta_time * glm::radians(90.f), glm::vec3(0.f, 0.f, 1.f));
+		glm::mat4 view = glm::lookAtRH(glm::vec3(2.f, 2.f, 2.f),
 		glm::vec3(0.f, 0.f, 0.f),
 		glm::vec3(0.f, 0.f, 1.f));
-	ubo_data.proj = glm::perspective(glm::radians(90.f),
+		glm::mat4 proj = glm::perspective(glm::radians(90.f),
 		(float) win.get_width() / win.get_height(),
 		0.f,
 		1000.f);
-	ubo_data.proj[1][1] *= -1;
+		proj[1][1] *= -1;
+		
+		UBO ubo_data { proj * view * model };
+
 		auto ubo_map = device->map_buffer(ubo.get());
 		memcpy(ubo_map.get_value(), &ubo_data, sizeof(ubo_data));
 		device->unmap_buffer(ubo.get());

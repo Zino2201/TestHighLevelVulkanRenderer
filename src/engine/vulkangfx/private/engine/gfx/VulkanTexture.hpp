@@ -105,6 +105,16 @@ inline VkImageSubresourceRange convert_subresource_range(const TextureSubresourc
 	return range;
 }
 
+inline VkImageSubresourceLayers convert_subresource_layers(const TextureSubresourceLayers& in_layers)
+{
+	VkImageSubresourceLayers layers;
+	layers.mipLevel = in_layers.mip_level;
+	layers.baseArrayLayer = in_layers.base_array_layer;
+	layers.layerCount = in_layers.layer_count;
+	layers.aspectMask = convert_aspect_flags(in_layers.aspect_flags);
+	return layers;
+}
+
 inline VkImageType convert_texture_type(const TextureType& in_type)
 {
 	switch(in_type)

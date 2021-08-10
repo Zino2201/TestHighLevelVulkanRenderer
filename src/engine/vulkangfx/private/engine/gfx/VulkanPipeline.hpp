@@ -327,4 +327,53 @@ inline VkPipelineBindPoint convert_pipeline_bind_point(const PipelineBindPoint& 
 	}
 }
 
+inline VkAccessFlags convert_access_flags(const AccessFlags in_flags)
+{
+	VkAccessFlags flags = 0;
+
+	if(in_flags & AccessFlagBits::TransferRead)
+		flags |= VK_ACCESS_TRANSFER_READ_BIT;
+
+	if(in_flags & AccessFlagBits::TransferWrite)
+		flags |= VK_ACCESS_TRANSFER_WRITE_BIT;
+
+	if(in_flags & AccessFlagBits::ShaderRead)
+		flags |= VK_ACCESS_SHADER_READ_BIT;
+
+	if(in_flags & AccessFlagBits::ShaderWrite)
+		flags |= VK_ACCESS_SHADER_WRITE_BIT;
+
+	if(in_flags & AccessFlagBits::HostRead)
+		flags |= VK_ACCESS_HOST_READ_BIT;
+
+	if(in_flags & AccessFlagBits::HostWrite)
+		flags |= VK_ACCESS_HOST_WRITE_BIT;
+
+	if(in_flags & AccessFlagBits::MemoryRead)
+		flags |= VK_ACCESS_MEMORY_READ_BIT;
+
+	if(in_flags & AccessFlagBits::MemoryWrite)
+		flags |= VK_ACCESS_MEMORY_WRITE_BIT;
+
+	if(in_flags & AccessFlagBits::ColorAttachmentRead)
+		flags |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+
+	if(in_flags & AccessFlagBits::ColorAttachmentWrite)
+		flags |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+	if(in_flags & AccessFlagBits::DepthStencilAttachmentRead)
+		flags |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+
+	if(in_flags & AccessFlagBits::DepthStencilAttachmentWrite)
+		flags |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+	if(in_flags & AccessFlagBits::InputAttachmentRead)
+		flags |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+
+	if(in_flags & AccessFlagBits::UniformRead)
+		flags |= VK_ACCESS_UNIFORM_READ_BIT;
+
+	return flags;
+}
+
 }

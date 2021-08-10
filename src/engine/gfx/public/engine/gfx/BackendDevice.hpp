@@ -119,12 +119,23 @@ public:
 		const uint32_t in_first_scissor,
 		const std::span<Rect2D>& in_scissors) = 0;
 
+	virtual void cmd_pipeline_barrier(const BackendDeviceResource in_list,
+		const PipelineStageFlags in_src_flags,
+		const PipelineStageFlags in_dst_flags,
+		const std::span<TextureMemoryBarrier>& in_texture_memory_barriers) = 0;
+
 	/** Transfer commands */
 	virtual void cmd_copy_buffer(const BackendDeviceResource& in_cmd_list,
 		const BackendDeviceResource& in_src_buffer,
 		const BackendDeviceResource& in_dst_buffer,
 		const std::span<BufferCopyRegion>& in_regions) = 0;
-	
+
+	virtual void cmd_copy_buffer_to_texture(const BackendDeviceResource in_list,
+		const BackendDeviceResource in_src_buffer,
+		const BackendDeviceResource in_dst_texture,
+		const TextureLayout in_dst_layout,
+		const std::span<BufferTextureCopyRegion>& in_copy_regions) = 0;
+
 	virtual void end_cmd_list(const BackendDeviceResource& in_list) = 0;
 
 	/** Fence */

@@ -151,5 +151,21 @@ struct TextureViewCreateInfo
 		TextureViewType in_type, Format in_format, const TextureSubresourceRange& in_subresource_range) :
 		texture(in_texture), type(in_type), format(in_format), subresource_range(in_subresource_range) {}
 };
+
+inline TextureAspectFlags format_to_aspect_flags(Format in_format)
+{
+	switch(in_format)
+	{
+	case Format::Undefined:
+		return TextureAspectFlags();
+	case Format::D24UnormS8Uint:
+	case Format::D32SfloatS8Uint:
+		return TextureAspectFlags(TextureAspectFlagBits::Depth | TextureAspectFlagBits::Stencil);
+	case Format::D32Sfloat:
+		return TextureAspectFlags(TextureAspectFlagBits::Depth);
+	default:
+		return TextureAspectFlags(TextureAspectFlagBits::Color);
+	}
+}
 	
 }

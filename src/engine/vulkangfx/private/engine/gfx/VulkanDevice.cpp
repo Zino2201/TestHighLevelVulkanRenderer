@@ -27,7 +27,7 @@ void VulkanDevice::FramebufferManager::new_frame()
 
 	for(const auto& framebuffer : expired_framebuffers)
 		framebuffers.erase(framebuffer);
-	}
+}
 
 VkFramebuffer VulkanDevice::FramebufferManager::get_or_create(VkRenderPass in_render_pass, const Framebuffer& in_framebuffer)
 {
@@ -92,7 +92,11 @@ VulkanDevice::~VulkanDevice()
 
 void VulkanDevice::new_frame()
 {
-	framebuffer_manager.new_frame();	
+	framebuffer_manager.new_frame();
+	
+	/** Update descriptor sets */
+	for(auto& allocator : descriptor_set_allocators)
+		allocator.new_frame();
 }
 
 cb::Result<BackendDeviceResource, Result> VulkanDevice::create_buffer(const BufferCreateInfo& in_create_info)
@@ -676,6 +680,20 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_pipeline_layout(c
 		return make_error(convert_result(result));
 
 	auto ret = new_resource<VulkanPipelineLayout>(*this, layout, set_layouts);
+	auto* layout_object = get_resource<VulkanPipelineLayout>(ret.get());
+
+	/** Create allocators */
+	size_t idx = 0;
+	for(const auto& set_layout : layout_object->set_layouts)
+	{
+		size_t allocator_idx = descriptor_set_allocators.emplace(*this,
+			*layout_object,
+			set_layout);
+		layout_object->allocators[idx] = &descriptor_set_allocators[allocator_idx];
+		layout_object->allocator_indices[idx] = allocator_idx;
+		idx++;
+	}
+
 	return make_result(ret.get());
 }
 
@@ -735,7 +753,8 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::allocate_descriptor_set(
 	const uint32_t in_set,
 	const std::span<Descriptor, max_bindings>& in_descriptors)
 {
-	return make_result(get_resource<VulkanPipelineLayout>(in_pipeline_layout)->allocate_set(in_set, in_descriptors));
+	return make_result(reinterpret_cast<BackendDeviceResource>(
+		get_resource<VulkanPipelineLayout>(in_pipeline_layout)->allocators[in_set]->allocate(in_descriptors)));
 }
 
 void VulkanDevice::destroy_buffer(const BackendDeviceResource& in_buffer)
@@ -1002,6 +1021,38 @@ void VulkanDevice::cmd_set_scissors(const BackendDeviceResource& in_list,
 		reinterpret_cast<VkRect2D*>(in_scissors.data()));
 }
 
+void VulkanDevice::cmd_pipeline_barrier(const BackendDeviceResource in_list, 
+	const PipelineStageFlags in_src_flags, 
+	const PipelineStageFlags in_dst_flags, 
+	const std::span<TextureMemoryBarrier>& in_texture_memory_barriers)
+{
+	std::vector<VkImageMemoryBarrier> image_barriers;
+	image_barriers.reserve(in_texture_memory_barriers.size());
+
+	for(const auto& barrier : in_texture_memory_barriers)
+		image_barriers.push_back(VkImageMemoryBarrier {
+			VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+			nullptr,
+			convert_access_flags(barrier.src_access_flags),
+			convert_access_flags(barrier.dst_access_flags),
+			convert_texture_layout(barrier.old_layout),
+			convert_texture_layout(barrier.new_layout),
+			VK_QUEUE_FAMILY_IGNORED,
+			VK_QUEUE_FAMILY_IGNORED,
+			get_resource<VulkanTexture>(barrier.texture)->get_texture() });
+
+	vkCmdPipelineBarrier(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+		convert_pipeline_stage_flags(in_src_flags),
+		convert_pipeline_stage_flags(in_dst_flags),
+		0,
+		0,
+		nullptr,
+		0,
+		nullptr,
+		static_cast<uint32_t>(image_barriers.size()),
+		image_barriers.data());
+}
+
 void VulkanDevice::cmd_copy_buffer(const BackendDeviceResource& in_cmd_list, 
 	const BackendDeviceResource& in_src_buffer, 
 	const BackendDeviceResource& in_dst_buffer, 
@@ -1020,6 +1071,33 @@ void VulkanDevice::cmd_copy_buffer(const BackendDeviceResource& in_cmd_list,
 	vkCmdCopyBuffer(get_resource<VulkanCommandList>(in_cmd_list)->get_command_buffer(),
 		src_buffer,
 		dst_buffer,
+		static_cast<uint32_t>(regions.size()),
+		regions.data());
+}
+
+void VulkanDevice::cmd_copy_buffer_to_texture(const BackendDeviceResource in_list, 
+	const BackendDeviceResource in_src_buffer, 
+	const BackendDeviceResource in_dst_texture, 
+	const TextureLayout in_dst_layout, 
+	const std::span<BufferTextureCopyRegion>& in_copy_regions)
+{
+	std::vector<VkBufferImageCopy> regions;
+	regions.reserve(in_copy_regions.size());
+
+	CB_CHECK((std::is_same_v<decltype(Offset3D::x), int32_t>));
+
+	for(const auto& region : in_copy_regions)
+		regions.push_back(VkBufferImageCopy {
+			region.buffer_offset,
+			0,
+			0,
+			convert_subresource_layers(region.texture_subresource),
+			*reinterpret_cast<const VkOffset3D*>(&region.texture_offset)});
+
+	vkCmdCopyBufferToImage(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+		get_resource<VulkanBuffer>(in_src_buffer)->get_buffer(),
+		get_resource<VulkanTexture>(in_dst_texture)->get_texture(),
+		convert_texture_layout(in_dst_layout),
 		static_cast<uint32_t>(regions.size()),
 		regions.data());
 }

@@ -341,6 +341,7 @@ cb::Result<BufferHandle, Result> Device::create_buffer(BufferInfo in_create_info
 				return result.get_error();
 			}
 
+			// TODO: Transfer queue
 			auto list = allocate_cmd_list(QueueType::Gfx);
 
 			std::array regions = { BufferCopyRegion(0, 0, in_create_info.info.size) };
@@ -362,6 +363,63 @@ cb::Result<BufferHandle, Result> Device::create_buffer(BufferInfo in_create_info
 		}
 	}
 	
+	return make_result(handle);
+}
+
+cb::Result<TextureHandle, Result> Device::create_texture(TextureInfo in_create_info)
+{
+	auto result = backend_device->create_texture(in_create_info.info);
+	if(!result)
+		return result.get_error();
+
+	auto texture = textures.allocate(*this, in_create_info.info, false,result.get_value());
+	auto handle = cast_resource_ptr<TextureHandle>(texture);
+
+	if(!in_create_info.initial_data.empty())
+	{
+		CB_CHECKF(format_to_aspect_flags(in_create_info.info.format) == TextureAspectFlags(TextureAspectFlagBits::Color),
+			"Only color texture formats support uploading initial data !");
+
+		/** Create a staging buffer containing our initial data */
+		UniqueBuffer staging(create_buffer(BufferInfo::make_staging(in_create_info.initial_data.size(),
+			in_create_info.initial_data)).get_value());
+
+		/** Transition our fresh texture to TransferDst */
+		auto list = allocate_cmd_list(QueueType::Gfx);
+		std::array regions =
+		{
+			BufferTextureCopyRegion(0, 
+				TextureSubresourceLayers(format_to_aspect_flags(texture->get_create_info().format),
+				0,
+				0,
+				1),
+				Offset3D(),
+				Extent3D())
+		};
+		cmd_texture_barrier(list,
+			handle,
+			PipelineStageFlags(PipelineStageFlagBits::TopOfPipe),
+			TextureLayout::Undefined,
+			AccessFlags(),
+			PipelineStageFlags(PipelineStageFlagBits::Transfer),
+			TextureLayout::TransferDst,
+			AccessFlags(AccessFlagBits::TransferWrite));
+		cmd_copy_buffer_to_texture(list,
+			staging.get(),
+			handle,
+			TextureLayout::TransferDst,
+			regions);
+		cmd_texture_barrier(list,
+			handle,
+			PipelineStageFlags(PipelineStageFlagBits::Transfer),
+			TextureLayout::TransferDst,
+			AccessFlags(AccessFlagBits::TransferWrite),
+			PipelineStageFlags(PipelineStageFlagBits::FragmentShader),
+			TextureLayout::ShaderReadOnly,
+			AccessFlags(AccessFlagBits::ShaderRead));
+		submit(list);
+	}
+
 	return make_result(handle);
 }
 
@@ -702,11 +760,11 @@ void Device::cmd_end_render_pass(const CommandListHandle& in_cmd_list)
 
 void Device::cmd_bind_vertex_buffer(const CommandListHandle& in_cmd_list, const BufferHandle& in_buffer, const uint64_t in_offset)
 {
-	std::array buffers = { cast_handle<Buffer>(in_buffer)->get_resource() };
+	std::array vertex_buffers = { cast_handle<Buffer>(in_buffer)->get_resource() };
 	std::array offsets = { in_offset };
 	backend_device->cmd_bind_vertex_buffers(cast_handle<CommandList>(in_cmd_list)->get_resource(),
 		0,
-		buffers,
+		vertex_buffers,
 		offsets);	
 }
 
@@ -716,6 +774,8 @@ void Device::cmd_copy_buffer(const CommandListHandle& in_cmd_list,
 	const std::span<BufferCopyRegion>& in_regions)
 {
 	CB_CHECK(!in_regions.empty());
+	CB_CHECK(in_src_buffer);
+	CB_CHECK(in_dst_buffer);
 
 	auto list = cast_handle<CommandList>(in_cmd_list);
 	auto src = cast_handle<Buffer>(in_src_buffer);
@@ -725,6 +785,58 @@ void Device::cmd_copy_buffer(const CommandListHandle& in_cmd_list,
 		src->get_resource(),
 		dst->get_resource(),
 		in_regions);	
+}
+
+void Device::cmd_copy_buffer_to_texture(const CommandListHandle& in_cmd_list, 
+	const BufferHandle& in_src_buffer, 
+	const TextureHandle& in_dst_texture,
+	const TextureLayout in_dst_layout,
+	const std::span<BufferTextureCopyRegion>& in_regions)
+{
+	CB_CHECK(!in_regions.empty());
+	CB_CHECK(in_src_buffer);
+	CB_CHECK(in_dst_texture);
+
+	auto list = cast_handle<CommandList>(in_cmd_list);
+	auto src = cast_handle<Buffer>(in_src_buffer);
+	auto dst = cast_handle<Texture>(in_dst_texture);
+
+	backend_device->cmd_copy_buffer_to_texture(list->get_resource(),
+		src->get_resource(),
+		dst->get_resource(),
+		in_dst_layout,
+		in_regions);
+}
+
+void Device::cmd_texture_barrier(const CommandListHandle& in_cmd_list,
+	const TextureHandle& in_texture,
+	const PipelineStageFlags in_src_flags, 
+	const TextureLayout in_src_layout, 
+	const AccessFlags in_src_access_flags, 
+	const PipelineStageFlags in_dst_flags, 
+	const TextureLayout in_dst_layout, 
+	const AccessFlags in_dst_access_flags)
+{
+	CB_CHECK(in_texture);
+
+	auto texture = cast_handle<Texture>(in_texture);
+
+	std::array barriers = 
+	{
+		TextureMemoryBarrier(texture->get_resource(),
+			in_src_access_flags,
+			in_dst_access_flags,
+			in_src_layout,
+			in_dst_layout,
+			TextureSubresourceRange(format_to_aspect_flags(texture->get_create_info().format), 
+				0, texture->get_create_info().mip_levels,
+				0, texture->get_create_info().array_layers))
+	};
+
+	backend_device->cmd_pipeline_barrier(cast_handle<CommandList>(in_cmd_list)->get_resource(),
+		in_src_flags,
+		in_dst_flags,
+		barriers);
 }
 
 Result Device::acquire_swapchain_texture(const SwapchainHandle& in_swapchain,
