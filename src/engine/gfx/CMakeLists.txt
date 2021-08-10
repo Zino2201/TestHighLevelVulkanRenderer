@@ -15,6 +15,7 @@ cb_add_module(gfx
 	public/engine/gfx/GfxPipeline.hpp
 	public/engine/gfx/RenderPass.hpp
 	public/engine/gfx/DeviceResource.hpp
+	public/engine/gfx/Sampler.hpp
 	public/engine/gfx/SwapChain.hpp
 	public/engine/gfx/Command.hpp
 	public/engine/gfx/Sync.hpp

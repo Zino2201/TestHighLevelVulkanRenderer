@@ -10,6 +10,7 @@
 #include "VulkanCommandList.hpp"
 #include "VulkanTextureView.hpp"
 #include "VulkanSync.hpp"
+#include "VulkanSampler.hpp"
 
 namespace cb::gfx
 {
@@ -531,6 +532,22 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_texture(const Tex
 	create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	create_info.samples = convert_sample_count_bit(in_create_info.sample_count);
 	create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+	create_info.usage = 0;
+
+	if(in_create_info.usage_flags & TextureUsageFlagBits::ColorAttachment)
+		create_info.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+	if(in_create_info.usage_flags & TextureUsageFlagBits::DepthStencilAttachment)
+		create_info.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+	if(in_create_info.usage_flags & TextureUsageFlagBits::Sampled)
+		create_info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+
+	if(in_create_info.usage_flags & TextureUsageFlagBits::TransferSrc)
+		create_info.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
+	if(in_create_info.usage_flags & TextureUsageFlagBits::TransferDst)
+		create_info.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
 	VmaAllocationCreateInfo alloc_create_info = {};
 	alloc_create_info.flags = 0;
@@ -561,6 +578,10 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_texture_view(cons
 	create_info.image = get_resource<VulkanTexture>(in_create_info.texture)->get_texture();
 	create_info.format = convert_format(in_create_info.format);
 	create_info.subresourceRange = convert_subresource_range(in_create_info.subresource_range);
+	create_info.components = VkComponentMapping { VK_COMPONENT_SWIZZLE_R,
+		VK_COMPONENT_SWIZZLE_G ,
+		VK_COMPONENT_SWIZZLE_B,
+		VK_COMPONENT_SWIZZLE_A };
 
 	VkImageView view;
 	VkResult result = vkCreateImageView(get_device(),
@@ -572,6 +593,37 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_texture_view(cons
 
 	auto ret = new_resource<VulkanTextureView>(*this, view);
 	return make_result(ret.get());
+}
+
+cb::Result<BackendDeviceResource, Result> VulkanDevice::create_sampler(const SamplerCreateInfo& in_create_info)
+{
+	VkSamplerCreateInfo create_info = {};
+	create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	create_info.pNext = nullptr;
+	create_info.flags = 0;
+	create_info.minFilter = convert_filter(in_create_info.min_filter);
+	create_info.magFilter = convert_filter(in_create_info.mag_filter);
+	create_info.mipmapMode = convert_filter_mipmap_mode(in_create_info.mip_map_mode);
+	create_info.addressModeU = convert_address_mode(in_create_info.address_mode_u);
+	create_info.addressModeV = convert_address_mode(in_create_info.address_mode_v);
+	create_info.addressModeW = convert_address_mode(in_create_info.address_mode_w);
+	create_info.mipLodBias = in_create_info.mip_lod_bias;
+	create_info.compareEnable = in_create_info.compare_op != CompareOp::Never;
+	create_info.compareOp = convert_compare_op(in_create_info.compare_op);
+	create_info.anisotropyEnable = in_create_info.enable_anisotropy;
+	create_info.maxAnisotropy = in_create_info.max_anisotropy;
+	create_info.minLod = in_create_info.min_lod;
+	create_info.maxLod = in_create_info.max_lod;
+
+	VkSampler sampler;
+	VkResult result = vkCreateSampler(get_device(),
+		&create_info,
+		nullptr,
+		&sampler);
+	if(result != VK_SUCCESS)
+		return make_error(convert_result(result));
+
+	return make_result(reinterpret_cast<BackendDeviceResource>(sampler));
 }
 
 cb::Result<BackendDeviceResource, Result> VulkanDevice::create_semaphore(const SemaphoreCreateInfo& in_create_info)
@@ -795,6 +847,11 @@ void VulkanDevice::destroy_texture(const BackendDeviceResource& in_texture)
 void VulkanDevice::destroy_texture_view(const BackendDeviceResource& in_texture_view)
 {
 	free_resource<VulkanTextureView>(in_texture_view);	
+}
+
+void VulkanDevice::destroy_sampler(const BackendDeviceResource& in_sampler)
+{
+	vkDestroySampler(get_device(), reinterpret_cast<VkSampler>(in_sampler), nullptr);	
 }
 
 void VulkanDevice::destroy_semaphore(const BackendDeviceResource& in_semaphore)
@@ -1039,8 +1096,9 @@ void VulkanDevice::cmd_pipeline_barrier(const BackendDeviceResource in_list,
 			convert_texture_layout(barrier.new_layout),
 			VK_QUEUE_FAMILY_IGNORED,
 			VK_QUEUE_FAMILY_IGNORED,
-			get_resource<VulkanTexture>(barrier.texture)->get_texture() });
-
+			get_resource<VulkanTexture>(barrier.texture)->get_texture(),
+			convert_subresource_range(barrier.subresource_range) });
+	
 	vkCmdPipelineBarrier(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
 		convert_pipeline_stage_flags(in_src_flags),
 		convert_pipeline_stage_flags(in_dst_flags),
@@ -1084,7 +1142,8 @@ void VulkanDevice::cmd_copy_buffer_to_texture(const BackendDeviceResource in_lis
 	std::vector<VkBufferImageCopy> regions;
 	regions.reserve(in_copy_regions.size());
 
-	CB_CHECK((std::is_same_v<decltype(Offset3D::x), int32_t>));
+	CB_CHECK((std::is_same_v<decltype(Offset3D::x), decltype(VkOffset3D::x)>));
+	CB_CHECK((std::is_same_v<decltype(Extent3D::width), decltype(VkExtent3D::width)>));
 
 	for(const auto& region : in_copy_regions)
 		regions.push_back(VkBufferImageCopy {
@@ -1092,7 +1151,8 @@ void VulkanDevice::cmd_copy_buffer_to_texture(const BackendDeviceResource in_lis
 			0,
 			0,
 			convert_subresource_layers(region.texture_subresource),
-			*reinterpret_cast<const VkOffset3D*>(&region.texture_offset)});
+			*reinterpret_cast<const VkOffset3D*>(&region.texture_offset),
+			*reinterpret_cast<const VkExtent3D*>(&region.texture_extent)});
 
 	vkCmdCopyBufferToImage(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
 		get_resource<VulkanBuffer>(in_src_buffer)->get_buffer(),

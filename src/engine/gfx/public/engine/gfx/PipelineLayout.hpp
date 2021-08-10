@@ -63,15 +63,19 @@ struct DescriptorBufferInfo
 
 struct DescriptorTextureInfo
 {
-	BackendDeviceResource sampler;
 	BackendDeviceResource texture_view;
 	TextureLayout layout;
 
-	DescriptorTextureInfo(const BackendDeviceResource in_sampler,
-		const BackendDeviceResource in_texture_view,
-		const TextureLayout in_layout) : sampler(in_sampler),
-		texture_view(in_texture_view),
+	DescriptorTextureInfo(const BackendDeviceResource in_texture_view,
+		const TextureLayout in_layout) : texture_view(in_texture_view),
 		layout(in_layout) {}
+};
+
+struct DescriptorSamplerInfo
+{
+	BackendDeviceResource sampler;
+
+	DescriptorSamplerInfo(const BackendDeviceResource in_sampler) : sampler(in_sampler) {}
 };
 
 struct Descriptor
@@ -80,12 +84,13 @@ struct Descriptor
 	{
 		None,
 		BufferInfo,
-		TextureInfo
+		TextureInfo,
+		SamplerInfo
 	};
 
 	DescriptorType type;
 	uint32_t binding;
-	std::variant<std::monostate, DescriptorBufferInfo, DescriptorTextureInfo> info;
+	std::variant<std::monostate, DescriptorBufferInfo, DescriptorTextureInfo, DescriptorSamplerInfo> info;
 
 	Descriptor() : type(DescriptorType::UniformBuffer),
 		binding(0),
@@ -108,9 +113,18 @@ struct Descriptor
 		Descriptor descriptor;
 		descriptor.type = DescriptorType::SampledTexture;
 		descriptor.binding = in_binding;
-		descriptor.info = DescriptorTextureInfo(null_backend_resource,
-			in_view,
+		descriptor.info = DescriptorTextureInfo(in_view,
 			TextureLayout::ShaderReadOnly);
+		return descriptor;
+	}
+
+	static Descriptor make_sampler_info(const uint32_t in_binding,
+		const BackendDeviceResource in_sampler)
+	{
+		Descriptor descriptor;
+		descriptor.type = DescriptorType::Sampler;
+		descriptor.binding = in_binding;
+		descriptor.info = DescriptorSamplerInfo(in_sampler);
 		return descriptor;
 	}
 };
@@ -146,9 +160,18 @@ template<> struct hash<cb::gfx::DescriptorTextureInfo>
 	uint64_t operator()(const cb::gfx::DescriptorTextureInfo& in_info) const noexcept
 	{
 		uint64_t hash = 0;
-		cb::hash_combine(hash, in_info.sampler);
 		cb::hash_combine(hash, in_info.texture_view);
 		cb::hash_combine(hash, in_info.layout);
+		return hash;
+	}
+};
+
+template<> struct hash<cb::gfx::DescriptorSamplerInfo>
+{
+	uint64_t operator()(const cb::gfx::DescriptorSamplerInfo& in_info) const noexcept
+	{
+		uint64_t hash = 0;
+		cb::hash_combine(hash, in_info.sampler);
 		return hash;
 	}
 };

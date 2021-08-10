@@ -61,7 +61,7 @@ struct DeviceResource
 
 	[[nodiscard]] constexpr uint64_t get_handle() const { return handle; }
 
-	constexpr explicit operator bool() const { return handle != null; }
+	[[nodiscard]] constexpr explicit operator bool() const { return handle != null; }
 private:
 	uint64_t handle;
 };
@@ -79,5 +79,6 @@ using PipelineHandle = detail::DeviceResource<DeviceResourceType::Pipeline>;
 using SwapchainHandle = detail::DeviceResource<DeviceResourceType::Swapchain>;
 using FenceHandle = detail::DeviceResource<DeviceResourceType::Fence>;
 using SemaphoreHandle = detail::DeviceResource<DeviceResourceType::Semaphore>;
+using SamplerHandle = detail::DeviceResource<DeviceResourceType::Sampler>;
 
 }

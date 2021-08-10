@@ -131,6 +131,7 @@ public:
 	cb::Result<BackendDeviceResource, Result> create_buffer(const BufferCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_texture(const TextureCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_texture_view(const TextureViewCreateInfo& in_create_info) override;
+	cb::Result<BackendDeviceResource, Result> create_sampler(const SamplerCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_swap_chain(const SwapChainCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_shader(const ShaderCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_gfx_pipeline(const GfxPipelineCreateInfo& in_create_info) override;
@@ -143,6 +144,7 @@ public:
 	void destroy_buffer(const BackendDeviceResource& in_buffer) override;
 	void destroy_texture(const BackendDeviceResource& in_texture) override;
 	void destroy_texture_view(const BackendDeviceResource& in_texture_view) override;
+	void destroy_sampler(const BackendDeviceResource& in_sampler) override;
 	void destroy_swap_chain(const BackendDeviceResource& in_swap_chain) override;
 	void destroy_shader(const BackendDeviceResource& in_shader) override;
 	void destroy_pipeline(const BackendDeviceResource& in_pipeline) override;

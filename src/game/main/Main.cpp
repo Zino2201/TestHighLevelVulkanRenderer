@@ -11,6 +11,8 @@
 #include <Windows.h>
 #endif
 #include <glm/gtc/matrix_transform.hpp>
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 
 std::vector<char> read_binary_file(const std::string& in_name)
 {
@@ -32,7 +34,7 @@ using namespace cb::gfx;
 struct Vertex
 {
 	glm::vec2 position;
-	glm::vec3 color;
+	glm::vec2 texcoord;
 
 	static VertexInputBindingDescription get_binding_description()
 	{
@@ -44,7 +46,7 @@ struct Vertex
 		return
 		{
 			VertexInputAttributeDescription(0, 0, Format::R32G32Sfloat, offsetof(Vertex, position)),
-			VertexInputAttributeDescription(1, 0, Format::R32G32B32Sfloat, offsetof(Vertex, color)),
+			VertexInputAttributeDescription(1, 0, Format::R32G32Sfloat, offsetof(Vertex, texcoord)),
 		};
 	}
 };
@@ -55,20 +57,14 @@ struct UBO
 };
 
 const std::vector<Vertex> vertices = {
-    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+	{{0.0f, -0.5f}, {0.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f}}
 };
 
 int main()
 {
 	using namespace cb;
-
-#if CB_PLATFORM(WINDOWS)
-	DWORD mode;
-	GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &mode);
-	SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
-#endif
 
 	logger::set_pattern("[{time}] [{severity}] ({category}) {message}");
 	logger::add_sink(std::make_unique<logger::StdoutSink>());
@@ -131,7 +127,9 @@ int main()
 	std::array<DescriptorSetLayoutCreateInfo, 1> layouts;
 	std::vector<DescriptorSetLayoutBinding> bindings =
 	{
-		DescriptorSetLayoutBinding(0, DescriptorType::UniformBuffer, 1, ShaderStageFlags(ShaderStageFlagBits::Vertex))
+		DescriptorSetLayoutBinding(0, DescriptorType::UniformBuffer, 1, ShaderStageFlags(ShaderStageFlagBits::Vertex)),
+		DescriptorSetLayoutBinding(1, DescriptorType::Sampler, 1, ShaderStageFlags(ShaderStageFlagBits::Fragment)),
+		DescriptorSetLayoutBinding(2, DescriptorType::SampledTexture, 1, ShaderStageFlags(ShaderStageFlagBits::Fragment)),
 	};
 
 	layouts[0].bindings = bindings;
@@ -144,8 +142,24 @@ int main()
 		BufferUsageFlags(BufferUsageFlagBits::VertexBuffer)), 
 		{ (uint8_t*) vertices.data(), vertices.size() * sizeof(Vertex) })).get_value());
 
-
 	UniqueBuffer ubo(device->create_buffer(BufferInfo::make_ubo(sizeof(UBO))).get_value());
+
+	UniqueSampler sampler(device->create_sampler(SamplerCreateInfo()).get_value());
+
+	UniqueTexture texture;
+	{
+		int width, height, channels;
+		stbi_uc* pixels = stbi_load("unknown.png", &width, &height, &channels, STBI_rgb_alpha);
+		texture = UniqueTexture(device->create_texture(TextureInfo::make_immutable_2d(width,
+			height,
+			Format::R8G8B8A8Unorm,
+			1,
+			TextureUsageFlags(TextureUsageFlagBits::Sampled),
+			{ pixels, pixels + (width * height * 4) })).get_value());
+		
+	}
+	UniqueTextureView texture_view(device->create_texture_view(TextureViewInfo::make_2d(texture.get(),
+		Format::R8G8B8A8Unorm)).get_value());
 
 	while(!glfwWindowShouldClose(win.get_handle()))
 	{
@@ -165,7 +179,7 @@ int main()
 		glm::mat4 view = glm::lookAtRH(glm::vec3(2.f, 2.f, 2.f),
 		glm::vec3(0.f, 0.f, 0.f),
 		glm::vec3(0.f, 0.f, 1.f));
-		glm::mat4 proj = glm::perspective(glm::radians(90.f),
+		glm::mat4 proj = glm::perspective(glm::radians(45.f),
 		(float) win.get_width() / win.get_height(),
 		0.f,
 		1000.f);
@@ -179,7 +193,7 @@ int main()
 
 		auto list = device->allocate_cmd_list(QueueType::Gfx);
 
-		std::array clear_values = { ClearValue(ClearColorValue({1, 1, 0, 1})) };
+		std::array clear_values = { ClearValue(ClearColorValue({0, 0, 0, 1})) };
 		std::array color_attachments = { device->get_swapchain_backbuffer_view(swapchain.get()) };
 		
 		RenderPassInfo info;
@@ -221,6 +235,8 @@ int main()
 		device->cmd_bind_pipeline_layout(list, pipeline_layout.get());
 		device->cmd_bind_vertex_buffer(list, vertex_buffer.get(), 0);
 		device->cmd_bind_ubo(list, 0, 0, ubo.get());
+		device->cmd_bind_sampler(list, 0, 1, sampler.get());
+		device->cmd_bind_texture_view(list, 0, 2, texture_view.get());
 		device->cmd_draw(list, 3, 1, 0, 0);
 		device->cmd_end_render_pass(list);
 		device->submit(list, render_wait_semaphores, render_finished_semaphores);

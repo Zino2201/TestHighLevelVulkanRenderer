@@ -20,6 +20,7 @@ static const std::array descriptor_pool_sizes =
 	VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, default_descriptor_count_per_type },
 	VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, default_descriptor_count_per_type },
 	VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, default_descriptor_count_per_type },
+	VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, default_descriptor_count_per_type },
 };
 
 VulkanDescriptorSetAllocator::~VulkanDescriptorSetAllocator()
@@ -68,25 +69,47 @@ VkDescriptorSet VulkanDescriptorSetAllocator::allocate(const std::span<Descripto
 	std::vector<VkWriteDescriptorSet> writes;
 	writes.reserve(in_descriptors.size());
 
+	std::vector<std::variant<std::monostate, VkDescriptorBufferInfo, VkDescriptorImageInfo>> infos;
+	infos.reserve(in_descriptors.size());
+
 	for(const auto& descriptor : in_descriptors)
 	{
 		if(descriptor.info.index() == Descriptor::None)
 			continue;
 
-		std::variant<VkDescriptorBufferInfo, VkDescriptorImageInfo> info;
+		auto& info = infos.emplace_back();
 
-		if(descriptor.info.index() == Descriptor::BufferInfo)
+		switch(descriptor.info.index())
+		{
+		default:
+			CB_UNREACHABLE();
+			break;
+		case Descriptor::BufferInfo:
 		{
 			DescriptorBufferInfo buffer = std::get<DescriptorBufferInfo>(descriptor.info);
-			info = VkDescriptorBufferInfo { get_resource<VulkanBuffer>(buffer.handle)->get_buffer(), buffer.offset, buffer.range };
+			info = VkDescriptorBufferInfo { get_resource<VulkanBuffer>(buffer.handle)->get_buffer(),
+				buffer.offset,
+				buffer.range };
+			break;
 		}
-		else
+		case Descriptor::TextureInfo:
 		{
 			DescriptorTextureInfo texture = std::get<DescriptorTextureInfo>(descriptor.info);
 			info = VkDescriptorImageInfo {
 				VK_NULL_HANDLE,
 				get_resource<VulkanTextureView>(texture.texture_view)->get_image_view(),
 				convert_texture_layout(texture.layout) };
+			break;
+		}
+		case Descriptor::SamplerInfo:
+		{
+			DescriptorSamplerInfo sampler = std::get<DescriptorSamplerInfo>(descriptor.info);
+			info = VkDescriptorImageInfo {
+				reinterpret_cast<VkSampler>(sampler.sampler),
+				VK_NULL_HANDLE,
+				VK_IMAGE_LAYOUT_UNDEFINED};
+			break;
+		}
 		}
 
 		writes.emplace_back(
@@ -97,7 +120,7 @@ VkDescriptorSet VulkanDescriptorSetAllocator::allocate(const std::span<Descripto
 			0,
 			1,
 			convert_descriptor_type(descriptor.type),
-			descriptor.info.index() == Descriptor::TextureInfo ? &std::get<VkDescriptorImageInfo>(info) : nullptr,
+			descriptor.info.index() != Descriptor::BufferInfo ? &std::get<VkDescriptorImageInfo>(info) : nullptr,
 			descriptor.info.index() == Descriptor::BufferInfo ? &std::get<VkDescriptorBufferInfo>(info) : nullptr,
 			nullptr);
 	}

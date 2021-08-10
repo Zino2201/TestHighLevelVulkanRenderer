@@ -13,6 +13,7 @@
 #include "Buffer.hpp"
 #include "PipelineLayout.hpp"
 #include "RenderPass.hpp"
+#include "Sampler.hpp"
 #include "Sync.hpp"
 #include "Rect.hpp"
 #include <thread>
@@ -196,6 +197,14 @@ public:
 	~Semaphore();
 };
 
+class Sampler : public BackendResourceWrapper
+{
+public:
+	Sampler(Device& in_device,
+		const BackendDeviceResource& in_sampler) : BackendResourceWrapper(in_device, in_sampler) {}
+	~Sampler();
+};
+
 template<> struct IsHandleCompatibleWith<Buffer, BufferHandle> : std::true_type {};
 template<> struct IsHandleCompatibleWith<Texture, TextureHandle> : std::true_type {};
 template<> struct IsHandleCompatibleWith<TextureView, TextureViewHandle> : std::true_type {};
@@ -205,6 +214,7 @@ template<> struct IsHandleCompatibleWith<CommandList, CommandListHandle> : std::
 template<> struct IsHandleCompatibleWith<PipelineLayout, PipelineLayoutHandle> : std::true_type {};
 template<> struct IsHandleCompatibleWith<Fence, FenceHandle> : std::true_type {};
 template<> struct IsHandleCompatibleWith<Semaphore, SemaphoreHandle> : std::true_type {};
+template<> struct IsHandleCompatibleWith<Sampler, SamplerHandle> : std::true_type {};
 
 /*
  * Spawn one command pool per thread
@@ -308,6 +318,36 @@ struct TextureInfo
 	}
 };
 
+struct TextureViewInfo
+{
+	TextureViewType type;
+	TextureHandle texture;
+	Format format;
+	TextureSubresourceRange subresource_range;
+
+	TextureViewInfo(const TextureViewType in_type,
+		const TextureHandle& in_handle,
+		const Format in_format,
+		const TextureSubresourceRange& in_subresource_range) : type(in_type),
+		texture(in_handle),
+		format(in_format),
+		subresource_range(in_subresource_range) {}
+
+	static TextureViewInfo make_2d(const TextureHandle& in_handle,
+		const Format in_format,
+		const TextureSubresourceRange& in_subresource_range = TextureSubresourceRange(
+			TextureAspectFlags(TextureAspectFlagBits::Color),
+			0,1,
+			0,
+			1))
+	{
+		return TextureViewInfo(TextureViewType::Tex2D,
+			in_handle,
+			in_format,
+			in_subresource_range);
+	}
+};
+
 /**
  * Informations about a render pass
  */
@@ -377,6 +417,7 @@ class Device final
 		std::vector<PipelineHandle> expired_pipelines;
 		std::vector<FenceHandle> expired_fences;
 		std::vector<SemaphoreHandle> expired_semaphores;
+		std::vector<SamplerHandle> expired_samplers;
 
 		std::vector<CommandListHandle> gfx_lists;
 		std::vector<SemaphoreHandle> gfx_wait_semaphores;
@@ -396,9 +437,7 @@ class Device final
 			expired_pipeline_layouts.clear();
 			expired_pipelines.clear();
 
-			/** Only reset commands if there are been submissions since we may have command lists created in game startup */
-			//if(gfx_submitted)
-				gfx_command_pool.reset();
+			gfx_command_pool.reset();
 
 			gfx_lists.clear();
 			gfx_wait_semaphores.clear();
@@ -433,15 +472,18 @@ public:
 	
 	[[nodiscard]] cb::Result<BufferHandle, Result> create_buffer(BufferInfo in_create_info);
 	[[nodiscard]] cb::Result<TextureHandle, Result> create_texture(TextureInfo in_create_info);
+	[[nodiscard]] cb::Result<TextureViewHandle, Result> create_texture_view(TextureViewInfo in_create_info);
 	[[nodiscard]] cb::Result<SwapchainHandle, Result> create_swapchain(const SwapChainCreateInfo& in_create_info);
 	[[nodiscard]] cb::Result<SemaphoreHandle, Result> create_semaphore(const SemaphoreCreateInfo& in_create_info = {});
 	[[nodiscard]] cb::Result<FenceHandle, Result> create_fence(const FenceCreateInfo& in_create_info = {});
 	[[nodiscard]] cb::Result<ShaderHandle, Result> create_shader(const ShaderCreateInfo& in_create_info);
 	[[nodiscard]] cb::Result<PipelineLayoutHandle, Result> create_pipeline_layout(const PipelineLayoutCreateInfo& in_create_info);
+	[[nodiscard]] cb::Result<SamplerHandle, Result> create_sampler(const SamplerCreateInfo& in_create_info);
 
 	void destroy_buffer(const BufferHandle& in_buffer);
 	void destroy_texture(const TextureHandle& in_texture);
 	void destroy_texture_view(const TextureViewHandle& in_texture_view);
+	void destroy_sampler(const SamplerHandle& in_sampler);
 	void destroy_swapchain(const SwapchainHandle& in_swapchain);
 	void destroy_shader(const ShaderHandle& in_shader);
 	void destroy_pipeline_layout(const PipelineLayoutHandle& in_pipeline_layout);
@@ -496,6 +538,8 @@ public:
 	/** Descriptor management */
 	void cmd_bind_ubo(const CommandListHandle& in_cmd_list, const uint32_t in_set, const uint32_t in_binding, 
 		const BufferHandle& in_handle);
+	void cmd_bind_sampler(const CommandListHandle& in_cmd_list, const uint32_t in_set, const uint32_t in_binding, 
+		const SamplerHandle& in_handle);
 	void cmd_bind_texture_view(const CommandListHandle& in_cmd_list, const uint32_t in_set, const uint32_t in_binding, 
 		const TextureViewHandle& in_handle);
 
@@ -552,6 +596,7 @@ private:
 	ThreadSafeSimplePool<detail::PipelineLayout> pipeline_layouts;
 	ThreadSafeSimplePool<detail::Fence> fences;
 	ThreadSafeSimplePool<detail::Semaphore> semaphores;
+	ThreadSafeSimplePool<detail::Sampler> samplers;
 };
 	
 /**
@@ -591,7 +636,7 @@ struct UniqueDeviceResource
 		return *this;
 	}
 
-	HandleType free()
+	[[nodiscard]] HandleType free()
 	{
 		HandleType freed_handle = handle;
 		handle = HandleType();
@@ -604,14 +649,20 @@ struct UniqueDeviceResource
 		handle = in_new_handle;
 	}
 
-	HandleType get() const
+	[[nodiscard]] HandleType get() const
+	{
+		CB_CHECK(handle)
+		return handle;
+	}
+
+	[[nodiscard]] HandleType operator*() const
 	{
 		return handle;
 	}
 
-	HandleType operator*() const
+	[[nodiscard]] bool is_valid() const
 	{
-		return handle;
+		return static_cast<bool>(handle);
 	}
 private:
 	void destroy()
@@ -652,5 +703,6 @@ CB_GFX_DECLARE_SMART_DEVICE_RESOURCE(PipelineLayout, pipeline_layout, PipelineLa
 CB_GFX_DECLARE_SMART_DEVICE_RESOURCE(Shader, shader, ShaderHandle);
 CB_GFX_DECLARE_SMART_DEVICE_RESOURCE(Swapchain, swapchain, SwapchainHandle);
 CB_GFX_DECLARE_SMART_DEVICE_RESOURCE(Semaphore, semaphore, SemaphoreHandle);
+CB_GFX_DECLARE_SMART_DEVICE_RESOURCE(Sampler, sampler, SamplerHandle);
 
 }

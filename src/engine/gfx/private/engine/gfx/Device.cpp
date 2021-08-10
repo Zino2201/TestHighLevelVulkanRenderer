@@ -100,6 +100,11 @@ Shader::~Shader()
 	device.get_backend_device()->destroy_shader(resource);
 }
 
+Sampler::~Sampler()
+{
+	device.get_backend_device()->destroy_sampler(resource);
+}
+
 void CommandList::update_descriptors()
 {
 	if(dirty_sets_mask == 0)
@@ -165,6 +170,7 @@ Device::~Device()
 	CB_CHECKF(shaders.get_size() == 0, "Some resources have not been freed before deleting the device!");
 	CB_CHECKF(semaphores.get_size() == 0, "Some resources have not been freed before deleting the device!");
 	CB_CHECKF(fences.get_size() == 0, "Some resources have not been freed before deleting the device!");
+	CB_CHECKF(samplers.get_size() == 0, "Some resources have not been freed before deleting the device!");
 
 	/** We can't do this yet as some dtor depends on current_device (get_device()) */
 	//current_device = nullptr;	
@@ -202,6 +208,9 @@ void Device::Frame::free_resources()
 	
 	for(auto& semaphore : expired_semaphores)
 		get_device()->semaphores.free(cast_handle<Semaphore>(semaphore));
+
+	for(auto& sampler : expired_samplers)
+		get_device()->samplers.free(cast_handle<Sampler>(sampler));
 }
 
 void Device::wait_idle()
@@ -368,6 +377,7 @@ cb::Result<BufferHandle, Result> Device::create_buffer(BufferInfo in_create_info
 
 cb::Result<TextureHandle, Result> Device::create_texture(TextureInfo in_create_info)
 {
+	in_create_info.info.usage_flags |= TextureUsageFlagBits::TransferSrc | TextureUsageFlagBits::TransferDst;
 	auto result = backend_device->create_texture(in_create_info.info);
 	if(!result)
 		return result.get_error();
@@ -394,7 +404,9 @@ cb::Result<TextureHandle, Result> Device::create_texture(TextureInfo in_create_i
 				0,
 				1),
 				Offset3D(),
-				Extent3D())
+				Extent3D(texture->get_create_info().width, 
+				texture->get_create_info().height,
+					texture->get_create_info().depth))
 		};
 		cmd_texture_barrier(list,
 			handle,
@@ -421,6 +433,22 @@ cb::Result<TextureHandle, Result> Device::create_texture(TextureInfo in_create_i
 	}
 
 	return make_result(handle);
+}
+
+cb::Result<TextureViewHandle, Result> Device::create_texture_view(TextureViewInfo in_create_info)
+{
+	auto texture = cast_handle<Texture>(in_create_info.texture);
+	TextureViewCreateInfo create_info(
+		texture->get_resource(),
+		in_create_info.type,
+		in_create_info.format,
+		in_create_info.subresource_range);
+	auto result = backend_device->create_texture_view(create_info);
+	if(!result)
+		return result.get_error();
+
+	auto texture_view = texture_views.allocate(*this, *texture, create_info,result.get_value());
+	return make_result(cast_resource_ptr<TextureViewHandle>(texture_view));
 }
 
 cb::Result<ShaderHandle, Result> Device::create_shader(const ShaderCreateInfo& in_create_info)
@@ -473,6 +501,16 @@ cb::Result<PipelineLayoutHandle, Result> Device::create_pipeline_layout(const Pi
 	return make_result(cast_resource_ptr<PipelineLayoutHandle>(layout));
 }
 
+cb::Result<SamplerHandle, Result> Device::create_sampler(const SamplerCreateInfo& in_create_info)
+{
+	auto result = backend_device->create_sampler(in_create_info);
+	if(!result)
+		return result.get_error();
+
+	auto sampler = samplers.allocate(*this, result.get_value());
+	return make_result(cast_resource_ptr<SamplerHandle>(sampler));
+}
+
 void Device::destroy_buffer(const BufferHandle& in_buffer)
 {
 	get_current_frame().expired_buffers.emplace_back(in_buffer);
@@ -486,6 +524,11 @@ void Device::destroy_texture(const TextureHandle& in_texture)
 void Device::destroy_texture_view(const TextureViewHandle& in_texture_view)
 {
 	get_current_frame().expired_texture_views.emplace_back(in_texture_view);
+}
+
+void Device::destroy_sampler(const SamplerHandle& in_sampler)
+{
+	get_current_frame().expired_samplers.emplace_back(in_sampler);
 }
 
 void Device::destroy_shader(const ShaderHandle& in_shader)
@@ -750,6 +793,17 @@ void Device::cmd_bind_texture_view(const CommandListHandle& in_cmd_list,
 	auto list = cast_handle<CommandList>(in_cmd_list);
 	list->descriptors[in_set][in_binding] = Descriptor::make_texture_view_info(in_binding,
 		cast_handle<TextureView>(in_handle)->get_resource());
+	list->dirty_sets_mask = 1 << in_set;
+}
+
+void Device::cmd_bind_sampler(const CommandListHandle& in_cmd_list, 
+	const uint32_t in_set, 
+	const uint32_t in_binding, 
+	const SamplerHandle& in_handle)
+{
+	auto list = cast_handle<CommandList>(in_cmd_list);
+	list->descriptors[in_set][in_binding] = Descriptor::make_sampler_info(in_binding,
+		cast_handle<Sampler>(in_handle)->get_resource());
 	list->dirty_sets_mask = 1 << in_set;
 }
 
