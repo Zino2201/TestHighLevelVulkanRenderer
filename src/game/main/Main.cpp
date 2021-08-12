@@ -413,7 +413,7 @@ int main()
 			ubo_data.world = model;
 			ubo_data.view = view;
 			ubo_data.proj = proj;
-
+			//Ss
 			auto ubo_map = device->map_buffer(ubos[i].get());
 			memcpy(ubo_map.get_value(), &ubo_data, sizeof(ubo_data));
 			device->unmap_buffer(ubos[i].get());
@@ -498,7 +498,7 @@ int main()
 		device->present(swapchain.get(), present_wait_semaphores);
 
 		using namespace std::chrono_literals;
-		//std::this_thread::sleep_for(6ms);
+		std::this_thread::sleep_for(6ms);
 	}
 
 	

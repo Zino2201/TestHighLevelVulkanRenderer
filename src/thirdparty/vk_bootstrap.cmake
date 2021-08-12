@@ -1,3 +1,1 @@
-FetchContent_Declare(vk_bootstrap
-	GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap.git)
-FetchContent_MakeAvailable(vk_bootstrap)
+CPMAddPackage("gh:charles-lunarg/vk-bootstrap#8922a41bd4241f572357e711a5012f19637d755b")

@@ -1,4 +1,2 @@
-FetchContent_Declare(stb 
-	GIT_REPOSITORY https://github.com/nothings/stb.git)
-FetchContent_MakeAvailable(stb)
+CPMAddPackage("gh:nothings/stb#3a1174060a7dd4eb652d4e6854bc4cd98c159200")
 set(STB_SOURCE_DIR ${stb_SOURCE_DIR} CACHE STRING "" FORCE)

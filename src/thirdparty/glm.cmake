@@ -1,3 +1,1 @@
-FetchContent_Declare(glm
-	GIT_REPOSITORY https://github.com/g-truc/glm.git)
-FetchContent_MakeAvailable(glm)
+CPMAddPackage("gh:g-truc/glm#0.9.9.8")

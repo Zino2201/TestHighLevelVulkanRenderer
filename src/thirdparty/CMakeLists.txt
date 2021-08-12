@@ -1,6 +1,7 @@
 add_compile_options(/EHsc)
 
 include(FetchContent)
+include(CPM.cmake)
 include(glfw.cmake)
 include(fmt.cmake)
 include(vk_bootstrap.cmake)
@@ -8,3 +9,4 @@ include(robin_hood_hashing.cmake)
 include(VulkanMemoryAllocator.cmake)
 include(glm.cmake)
 include(stb.cmake)
+include(DirectXShaderCompiler.cmake)
