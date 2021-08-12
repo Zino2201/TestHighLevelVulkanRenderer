@@ -22,6 +22,8 @@
 namespace cb::gfx
 {
 
+CB_DEFINE_LOG_CATEGORY(gfx_device);
+
 class Backend;
 class BackendDevice;
 class Device;
@@ -53,34 +55,62 @@ namespace detail
 template<typename T, typename Handle>
 struct IsHandleCompatibleWith : std::false_type {};
 
+template<DeviceResourceType Type>
 class BackendResourceWrapper
 {
+	inline static uint64_t resource_unique_idx = 0;
+
 public:
 	BackendResourceWrapper(Device& in_device,
-		const BackendDeviceResource& in_resource) : device(in_device),
-	resource(in_resource) {}
+		const BackendDeviceResource& in_resource,
+		const std::string_view& in_debug_name) : device(in_device),
+		resource(in_resource)
+	{
+#if CB_BUILD(DEBUG)
+		debug_name = in_debug_name;
+
+		if(debug_name.empty())
+			debug_name = std::string("Unnamed ") + std::to_string(Type) + " " + std::to_string(resource_unique_idx++);
+		logger::verbose(log_gfx_device, "Created device resource \"{}\"", debug_name);
+		device.get_backend_device()->set_resource_name(debug_name, 
+			Type,
+			in_resource);
+#endif
+	}
+
+	virtual ~BackendResourceWrapper()
+	{
+#if CB_BUILD(DEBUG)
+		logger::verbose(log_gfx_device, "Destroyed device resource \"{}\"", debug_name);
+#endif
+	}
 
 	[[nodiscard]] BackendDeviceResource get_resource() const { return resource; }
 protected:
 	Device& device;
-	BackendDeviceResource resource;	
+	BackendDeviceResource resource;
+#if CB_BUILD(DEBUG)
+	std::string debug_name;
+#endif
 };
 
-class Buffer : public BackendResourceWrapper
+class Buffer : public BackendResourceWrapper<DeviceResourceType::Buffer>
 {
 public:
 	Buffer(Device& in_device,
-		const BackendDeviceResource& in_buffer) : BackendResourceWrapper(in_device, in_buffer) {}
+		const BackendDeviceResource& in_buffer,
+		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_buffer, in_debug_name) {}
 	~Buffer();
 };
 
-class Texture : public BackendResourceWrapper
+class Texture : public BackendResourceWrapper<DeviceResourceType::Texture>
 {
 public:
 	Texture(Device& in_device,
 		const TextureCreateInfo& in_create_info,
 		const bool in_is_swapchain_texture,
-		const BackendDeviceResource& in_texture) : BackendResourceWrapper(in_device, in_texture),
+		const BackendDeviceResource& in_texture,
+		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_texture, in_debug_name),
 		create_info(in_create_info), is_swapchain_texture(in_is_swapchain_texture) {}
 	~Texture();
 
@@ -91,15 +121,15 @@ private:
 	bool is_swapchain_texture;
 };
 
-class TextureView : public BackendResourceWrapper
+class TextureView : public BackendResourceWrapper<DeviceResourceType::TextureView>
 {
 public:
 	TextureView(Device& in_device,
 		Texture& in_texture,
 		const TextureViewCreateInfo& in_create_info,
 		const BackendDeviceResource& in_texture_view,
-		const bool in_own_resource = true) : BackendResourceWrapper(in_device, in_texture_view), texture(in_texture),
-		create_info(in_create_info), own_resource(in_own_resource) {}
+		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_texture_view, in_debug_name), texture(in_texture),
+		create_info(in_create_info), is_view_from_swapchain(in_texture.is_texture_from_swapchain()) {}
 	~TextureView();
 
 	[[nodiscard]] Texture& get_texture() { return texture; }
@@ -107,25 +137,27 @@ public:
 private:
 	Texture& texture;
 	TextureViewCreateInfo create_info;
-	bool own_resource;
+	bool is_view_from_swapchain;
 };
 
-class Shader : public BackendResourceWrapper
+class Shader : public BackendResourceWrapper<DeviceResourceType::Shader>
 {
 public:
 	Shader(Device& in_device,
-		const BackendDeviceResource& in_shader) : BackendResourceWrapper(in_device, in_shader) {}
+		const BackendDeviceResource& in_shader,
+		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_shader, in_debug_name) {}
 	~Shader();
 };
 
-class Swapchain : public BackendResourceWrapper
+class Swapchain : public BackendResourceWrapper<DeviceResourceType::Swapchain>
 {
 	friend class Device;
 
 public:
 	Swapchain(Device& in_device,
 		const SwapChainCreateInfo& in_create_info,
-		const BackendDeviceResource& in_swapchain);
+		const BackendDeviceResource& in_swapchain,
+		const std::string_view& in_debug_name);
 	~Swapchain();
 
 	void reset_handles();
@@ -141,30 +173,33 @@ private:
 	uint32_t current_image;
 };
 
-class CommandPool : public BackendResourceWrapper
+class CommandPool : public BackendResourceWrapper<DeviceResourceType::CommandPool>
 {
 public:
 	CommandPool(Device& in_device,
-		const BackendDeviceResource& in_command_pool) : BackendResourceWrapper(in_device, in_command_pool) {}
+		const BackendDeviceResource& in_command_pool,
+		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_command_pool, in_debug_name) {}
 	~CommandPool();
 };
 
-class PipelineLayout : public BackendResourceWrapper
+class PipelineLayout : public BackendResourceWrapper<DeviceResourceType::PipelineLayout>
 {
 public:
 	PipelineLayout(Device& in_device,
-		const BackendDeviceResource& in_pipeline_layout) : BackendResourceWrapper(in_device, in_pipeline_layout) {}
+		const BackendDeviceResource& in_pipeline_layout,
+		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_pipeline_layout, in_debug_name) {}
 	~PipelineLayout();
 };
 
-class CommandList : public BackendResourceWrapper
+class CommandList : public BackendResourceWrapper<DeviceResourceType::CommandList>
 {
 	friend class Device;
 	
 public:
 	CommandList(Device& in_device,
 		const BackendDeviceResource& in_list,
-		const QueueType& in_type) : BackendResourceWrapper(in_device, in_list),
+		const QueueType& in_type,
+		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_list, in_debug_name),
 		type(in_type), pipeline_state_dirty(false), dirty_sets_mask(0) {}
 
 	void update_descriptors();
@@ -181,27 +216,30 @@ private:
 	uint8_t dirty_sets_mask;
 };
 
-class Fence : public BackendResourceWrapper
+class Fence : public BackendResourceWrapper<DeviceResourceType::Fence>
 {
 public:
 	Fence(Device& in_device,
-		const BackendDeviceResource& in_fence) : BackendResourceWrapper(in_device, in_fence) {}
+		const BackendDeviceResource& in_fence,
+		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_fence, in_debug_name) {}
 	~Fence();
 };
 
-class Semaphore : public BackendResourceWrapper
+class Semaphore : public BackendResourceWrapper<DeviceResourceType::Semaphore>
 {
 public:
 	Semaphore(Device& in_device,
-		const BackendDeviceResource& in_semaphore) : BackendResourceWrapper(in_device, in_semaphore) {}
+		const BackendDeviceResource& in_semaphore,
+		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_semaphore, in_debug_name) {}
 	~Semaphore();
 };
 
-class Sampler : public BackendResourceWrapper
+class Sampler : public BackendResourceWrapper<DeviceResourceType::Sampler>
 {
 public:
 	Sampler(Device& in_device,
-		const BackendDeviceResource& in_sampler) : BackendResourceWrapper(in_device, in_sampler) {}
+		const BackendDeviceResource& in_sampler,
+		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_sampler, in_debug_name) {}
 	~Sampler();
 };
 
@@ -263,7 +301,20 @@ private:
 
 }
 
-struct BufferInfo
+/** Base struct for device resource infos */
+template<typename T>
+struct DeviceResourceInfo
+{
+	std::string_view debug_name;
+	
+	T& set_debug_name(const std::string_view& in_debug_name)
+	{
+		debug_name = in_debug_name;
+		return static_cast<T&>(*this);
+	}
+};
+
+struct BufferInfo : public DeviceResourceInfo<BufferInfo>
 {
 	BufferCreateInfo info;
 	std::span<uint8_t> initial_data;
@@ -288,7 +339,7 @@ struct BufferInfo
 	}
 };
 
-struct TextureInfo
+struct TextureInfo : public DeviceResourceInfo<TextureInfo>
 {
 	TextureCreateInfo info;
 
@@ -316,9 +367,26 @@ struct TextureInfo
 			SampleCountFlagBits::Count1,
 			in_usage_flags), in_initial_data);
 	}
+
+	static TextureInfo make_depth_stencil_attachment(const uint32_t in_width, 
+		const uint32_t in_height,
+		const Format in_format,
+		const TextureUsageFlags in_usage_flags = TextureUsageFlags(TextureUsageFlagBits::DepthStencilAttachment))
+	{
+		return TextureInfo(TextureCreateInfo(TextureType::Tex2D,
+			MemoryUsage::GpuOnly,
+			in_format,
+			in_width,
+			in_height,
+			1,
+			1,
+			1,
+			SampleCountFlagBits::Count1,
+			in_usage_flags));
+	}
 };
 
-struct TextureViewInfo
+struct TextureViewInfo : public DeviceResourceInfo<TextureViewInfo>
 {
 	TextureViewType type;
 	TextureHandle texture;
@@ -346,6 +414,64 @@ struct TextureViewInfo
 			in_format,
 			in_subresource_range);
 	}
+
+	static TextureViewInfo make_depth(const TextureHandle& in_handle,
+		const Format in_format,
+		const TextureSubresourceRange& in_subresource_range = TextureSubresourceRange(
+			TextureAspectFlags(TextureAspectFlagBits::Depth),
+			0,1,
+			0,
+			1))
+	{
+		return TextureViewInfo(TextureViewType::Tex2D,
+			in_handle,
+			in_format,
+			in_subresource_range);
+	}
+};
+
+struct SwapChainInfo : public DeviceResourceInfo<SwapChainInfo>
+{
+	SwapChainCreateInfo create_info;
+
+	SwapChainInfo(const SwapChainCreateInfo& in_create_info) : create_info(in_create_info) {}
+};
+
+struct ShaderInfo : public DeviceResourceInfo<ShaderInfo>
+{
+	ShaderCreateInfo create_info;
+
+	ShaderInfo(const ShaderCreateInfo& in_create_info) : create_info(in_create_info) {}
+};
+
+struct FenceInfo : public DeviceResourceInfo<FenceInfo>
+{
+	FenceCreateInfo create_info;
+
+	FenceInfo() = default;
+	FenceInfo(const FenceCreateInfo& in_create_info) : create_info(in_create_info) {}
+};
+
+struct SemaphoreInfo : public DeviceResourceInfo<SemaphoreInfo>
+{
+	SemaphoreCreateInfo create_info;
+
+	SemaphoreInfo() = default;
+	SemaphoreInfo(const SemaphoreCreateInfo& in_create_info) : create_info(in_create_info) {}
+};
+
+struct PipelineLayoutInfo : public DeviceResourceInfo<PipelineLayoutInfo>
+{
+	PipelineLayoutCreateInfo create_info;
+
+	PipelineLayoutInfo(const PipelineLayoutCreateInfo& in_create_info) : create_info(in_create_info) {}
+};
+
+struct SamplerInfo : public DeviceResourceInfo<SamplerInfo>
+{
+	SamplerCreateInfo create_info;
+
+	SamplerInfo(const SamplerCreateInfo& in_create_info) : create_info(in_create_info) {}
 };
 
 /**
@@ -464,6 +590,7 @@ public:
 	void operator=(const Device&) = delete;
 	
 	void wait_idle();
+
 	void new_frame();
 	void end_frame();
 	void submit(CommandListHandle in_cmd_list, 
@@ -473,12 +600,12 @@ public:
 	[[nodiscard]] cb::Result<BufferHandle, Result> create_buffer(BufferInfo in_create_info);
 	[[nodiscard]] cb::Result<TextureHandle, Result> create_texture(TextureInfo in_create_info);
 	[[nodiscard]] cb::Result<TextureViewHandle, Result> create_texture_view(TextureViewInfo in_create_info);
-	[[nodiscard]] cb::Result<SwapchainHandle, Result> create_swapchain(const SwapChainCreateInfo& in_create_info);
-	[[nodiscard]] cb::Result<SemaphoreHandle, Result> create_semaphore(const SemaphoreCreateInfo& in_create_info = {});
-	[[nodiscard]] cb::Result<FenceHandle, Result> create_fence(const FenceCreateInfo& in_create_info = {});
-	[[nodiscard]] cb::Result<ShaderHandle, Result> create_shader(const ShaderCreateInfo& in_create_info);
-	[[nodiscard]] cb::Result<PipelineLayoutHandle, Result> create_pipeline_layout(const PipelineLayoutCreateInfo& in_create_info);
-	[[nodiscard]] cb::Result<SamplerHandle, Result> create_sampler(const SamplerCreateInfo& in_create_info);
+	[[nodiscard]] cb::Result<SwapchainHandle, Result> create_swapchain(const SwapChainInfo& in_create_info);
+	[[nodiscard]] cb::Result<SemaphoreHandle, Result> create_semaphore(const SemaphoreInfo& in_create_info);
+	[[nodiscard]] cb::Result<FenceHandle, Result> create_fence(const FenceInfo& in_create_info);
+	[[nodiscard]] cb::Result<ShaderHandle, Result> create_shader(const ShaderInfo& in_create_info);
+	[[nodiscard]] cb::Result<PipelineLayoutHandle, Result> create_pipeline_layout(const PipelineLayoutInfo& in_create_info);
+	[[nodiscard]] cb::Result<SamplerHandle, Result> create_sampler(const SamplerInfo& in_create_info);
 
 	void destroy_buffer(const BufferHandle& in_buffer);
 	void destroy_texture(const TextureHandle& in_texture);
@@ -508,10 +635,20 @@ public:
 		const uint32_t in_instance_count,
 		const uint32_t in_first_vertex,
 		const uint32_t in_first_index);
+	void cmd_draw_indexed(const CommandListHandle& in_list, 
+		const uint32_t in_index_count, 
+		const uint32_t in_instance_count, 
+		const uint32_t in_first_index, 
+		const int32_t in_vertex_offset, 
+		const uint32_t in_first_instance);
 	void cmd_end_render_pass(const CommandListHandle& in_cmd_list);
 	void cmd_bind_vertex_buffer(const CommandListHandle& in_cmd_list,
 		const BufferHandle& in_buffer,
 		const uint64_t in_offset);
+	void cmd_bind_index_buffer(const CommandListHandle& in_cmd_list,
+		const BufferHandle& in_buffer,
+		const uint64_t in_offset,
+		const IndexType in_index_type);
 	void cmd_copy_buffer(const CommandListHandle& in_cmd_list,
 		const BufferHandle& in_src_buffer,
 		const BufferHandle& in_dst_buffer,

@@ -249,4 +249,37 @@ inline Format convert_vk_format(const VkFormat in_format)
 	}
 }
 
+inline VkObjectType convert_object_type(DeviceResourceType in_type)
+{
+	switch(in_type)
+	{
+	case DeviceResourceType::Buffer:
+		return VK_OBJECT_TYPE_BUFFER;
+	case DeviceResourceType::Texture:
+		return VK_OBJECT_TYPE_IMAGE;
+	case DeviceResourceType::TextureView:
+		return VK_OBJECT_TYPE_IMAGE_VIEW;
+	case DeviceResourceType::Sampler:
+		return VK_OBJECT_TYPE_SAMPLER;
+	case DeviceResourceType::Swapchain:
+		return VK_OBJECT_TYPE_SWAPCHAIN_KHR;
+	case DeviceResourceType::CommandPool:
+		return VK_OBJECT_TYPE_COMMAND_POOL;
+	case DeviceResourceType::CommandList:
+		return VK_OBJECT_TYPE_COMMAND_BUFFER;
+	case DeviceResourceType::Fence:
+		return VK_OBJECT_TYPE_FENCE;
+	case DeviceResourceType::Pipeline:
+		return VK_OBJECT_TYPE_PIPELINE;
+	case DeviceResourceType::PipelineLayout:
+		return VK_OBJECT_TYPE_PIPELINE_LAYOUT;
+	case DeviceResourceType::Semaphore:
+		return VK_OBJECT_TYPE_SEMAPHORE;
+	case DeviceResourceType::Shader:
+		return VK_OBJECT_TYPE_SHADER_MODULE;
+	default:
+		return VK_OBJECT_TYPE_UNKNOWN;
+	}
+}
+
 }

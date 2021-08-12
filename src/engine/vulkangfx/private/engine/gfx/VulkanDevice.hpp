@@ -128,6 +128,10 @@ public:
 		vkDeviceWaitIdle(get_device());
 	}
 
+	void set_resource_name(const std::string_view& in_name, 
+		const DeviceResourceType in_type, 
+		const BackendDeviceResource in_handle) override;
+
 	cb::Result<BackendDeviceResource, Result> create_buffer(const BufferCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_texture(const TextureCreateInfo& in_create_info) override;
 	cb::Result<BackendDeviceResource, Result> create_texture_view(const TextureViewCreateInfo& in_create_info) override;
@@ -180,6 +184,12 @@ public:
 		const uint32_t in_instance_count,
 		const uint32_t in_first_vertex,
 		const uint32_t in_first_instance) override;
+	void cmd_draw_indexed(const BackendDeviceResource& in_list,
+		const uint32_t in_index_count,
+		const uint32_t in_instance_count,
+		const uint32_t in_first_index,
+		const int32_t in_vertex_offset,
+		const uint32_t in_first_instance) override;
 	void cmd_end_render_pass(const BackendDeviceResource& in_list) override;
 	void cmd_bind_descriptor_sets(const BackendDeviceResource in_list, 
 		const BackendDeviceResource in_pipeline_layout, 
@@ -188,6 +198,10 @@ public:
 		const uint32_t in_first_binding, 
 		const std::span<BackendDeviceResource> in_buffers, 
 		const std::span<uint64_t> in_offsets) override;
+	void cmd_bind_index_buffer(const BackendDeviceResource in_list,
+		const BackendDeviceResource in_index_buffer,
+		const uint64_t in_offset,
+		const IndexType in_index_type) override;
 	void cmd_set_viewports(const BackendDeviceResource& in_list, const uint32_t in_first_viewport, const std::span<Viewport>& in_viewports) override;
 	void cmd_set_scissors(const BackendDeviceResource& in_list, const uint32_t in_first_scissor, const std::span<Rect2D>& in_scissors) override;
 

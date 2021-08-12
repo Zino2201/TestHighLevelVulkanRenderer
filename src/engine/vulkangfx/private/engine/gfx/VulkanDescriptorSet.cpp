@@ -8,20 +8,22 @@
 namespace cb::gfx
 {
 
-
-static constexpr uint32_t max_descriptor_sets_per_pool = 32;
+static constexpr uint32_t max_descriptor_sets_per_pool = 8;
 static constexpr uint32_t default_descriptor_count_per_type = 32;
 
-static const std::array descriptor_pool_sizes =
+VulkanDescriptorSetAllocator::VulkanDescriptorSetAllocator(VulkanDevice& in_device,
+	VulkanPipelineLayout& in_pipeline_layout,
+	VkDescriptorSetLayout in_set_layout) : device(in_device),
+	pipeline_layout(in_pipeline_layout), set_layout(in_set_layout)
 {
-	VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, default_descriptor_count_per_type },
-	VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, default_descriptor_count_per_type },
-	VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_SAMPLER, default_descriptor_count_per_type },
-	VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, default_descriptor_count_per_type },
-	VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, default_descriptor_count_per_type },
-	VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, default_descriptor_count_per_type },
-	VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, default_descriptor_count_per_type },
-};
+	for(size_t type = 0; type < VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT; ++type)
+	{
+		if(in_pipeline_layout.get_descriptor_type_mask() & (1 << type))
+		{
+			pool_sizes.push_back(VkDescriptorPoolSize{ static_cast<VkDescriptorType>(type), default_descriptor_count_per_type });
+		}
+	}
+}
 
 VulkanDescriptorSetAllocator::~VulkanDescriptorSetAllocator()
 {
@@ -131,6 +133,8 @@ VkDescriptorSet VulkanDescriptorSetAllocator::allocate(const std::span<Descripto
 		0,
 		nullptr);
 
+	logger::verbose(log_vulkan, "Updated descriptor set");
+
 	hashmap.insert({ hash, Node(set)} );
 
 	return set;
@@ -144,8 +148,8 @@ void VulkanDescriptorSetAllocator::allocate_pool()
 	create_info.pNext = nullptr;
 	create_info.flags = 0;
 	create_info.maxSets = max_descriptor_sets_per_pool;
-	create_info.poolSizeCount = static_cast<uint32_t>(descriptor_pool_sizes.size());
-	create_info.pPoolSizes = descriptor_pool_sizes.data();
+	create_info.poolSizeCount = static_cast<uint32_t>(pool_sizes.size());
+	create_info.pPoolSizes = pool_sizes.data();
 
 	VkDescriptorPool pool;
 	VkResult result = vkCreateDescriptorPool(device.get_device(),
@@ -176,6 +180,8 @@ void VulkanDescriptorSetAllocator::allocate_pool()
 
 	for(auto set : sets)
 		free_sets.push(set);
+
+	logger::verbose(log_vulkan, "Allocated descriptor pool with {} descriptor sets", max_descriptor_sets_per_pool);
 }
 
 }

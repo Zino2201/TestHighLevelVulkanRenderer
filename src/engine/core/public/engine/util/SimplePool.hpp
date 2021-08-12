@@ -25,14 +25,14 @@ class SimplePool
 
 public:
 	SimplePool() : size(0) {}
-	~SimplePool()
-	{
-		
-	}
+	~SimplePool() = default;
 	
 	template<typename... Args>
 	T* allocate(Args&&... in_args)
 	{
+		size++;
+		return new T(std::forward<Args>(in_args)...);
+
 		if constexpr(ThreadSafe)
 			std::lock_guard<std::mutex> guard(mutex);
 		
@@ -63,6 +63,8 @@ public:
 	void free(T* in_ptr)
 	{
 		size--;
+		delete in_ptr;
+		return;
 		in_ptr->~T();
 
 		if constexpr(ThreadSafe)

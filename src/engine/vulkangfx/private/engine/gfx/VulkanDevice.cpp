@@ -100,6 +100,59 @@ void VulkanDevice::new_frame()
 		allocator.new_frame();
 }
 
+void VulkanDevice::set_resource_name(const std::string_view& in_name, 
+	const DeviceResourceType in_type, 
+	const BackendDeviceResource in_handle) 
+{
+	if(!backend.has_debug_layers())
+		return;
+
+	VkDebugUtilsObjectNameInfoEXT info = {};
+	info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+	info.pNext = nullptr;
+	info.objectType = convert_object_type(in_type);
+	info.pObjectName = in_name.data();
+
+	switch(in_type)
+	{
+	case DeviceResourceType::Buffer:
+		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanBuffer>(in_handle)->get_buffer());
+		break;
+	case DeviceResourceType::Texture:
+		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanTexture>(in_handle)->get_texture());
+		break;
+	case DeviceResourceType::TextureView:
+		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanTextureView>(in_handle)->get_image_view());
+		break;
+	case DeviceResourceType::Sampler:
+		info.objectHandle = in_handle;
+		break;
+	case DeviceResourceType::Swapchain:
+		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanSwapChain>(in_handle)->get_swapchain().swapchain);
+		break;
+	case DeviceResourceType::Pipeline:
+		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanPipeline>(in_handle)->get_pipeline());
+		break;
+	case DeviceResourceType::PipelineLayout:
+		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanPipelineLayout>(in_handle)->get_pipeline_layout());
+		break;
+	case DeviceResourceType::Shader:
+		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanShader>(in_handle)->shader_module);
+		break;
+	case DeviceResourceType::CommandList:
+		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanCommandList>(in_handle)->get_command_buffer());
+		break;
+	case DeviceResourceType::Fence:
+		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanFence>(in_handle)->get_fence());
+		break;
+	case DeviceResourceType::Semaphore:
+		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanSemaphore>(in_handle)->get_semaphore());
+		break;
+	}
+
+	backend.vkSetDebugUtilsObjectNameEXT(get_device(), &info);	
+}
+
 cb::Result<BackendDeviceResource, Result> VulkanDevice::create_buffer(const BufferCreateInfo& in_create_info)
 {
 	CB_CHECK(in_create_info.size != 0 && in_create_info.usage_flags != BufferUsageFlags())
@@ -308,6 +361,8 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_gfx_pipeline(cons
 	depth_stencil_state.stencilTestEnable = in_create_info.depth_stencil_state.enable_stencil_test;
 	depth_stencil_state.front = convert_stencil_op_state(in_create_info.depth_stencil_state.front_face);
 	depth_stencil_state.back = convert_stencil_op_state(in_create_info.depth_stencil_state.back_face);
+	depth_stencil_state.minDepthBounds = 0.f;
+	depth_stencil_state.maxDepthBounds = 1.f;
 
 	VkPipelineColorBlendStateCreateInfo color_blend_state = {};
 	color_blend_state.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -471,6 +526,7 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_render_pass(const
 		desc.pResolveAttachments = holder.resolve_attachments.data();
 		desc.preserveAttachmentCount = static_cast<uint32_t>(subpass.preserve_attachments.size());
 		desc.pPreserveAttachments = subpass.preserve_attachments.data();
+		desc.pDepthStencilAttachment = &holder.depth_stencil_attachment;
 		
 		subpasses.push_back(desc);
 	}
@@ -552,7 +608,7 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_texture(const Tex
 	VmaAllocationCreateInfo alloc_create_info = {};
 	alloc_create_info.flags = 0;
 	alloc_create_info.usage = convert_memory_usage(in_create_info.mem_usage);	
-	
+
 	VkImage image;
 	VmaAllocation allocation;
 	VkResult result = vmaCreateImage(allocator,
@@ -583,7 +639,7 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_texture_view(cons
 		VK_COMPONENT_SWIZZLE_B,
 		VK_COMPONENT_SWIZZLE_A };
 
-	VkImageView view;
+	VkImageView view = VK_NULL_HANDLE;
 	VkResult result = vkCreateImageView(get_device(),
 		&create_info,
 		nullptr,
@@ -673,6 +729,9 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_pipeline_layout(c
 {
 	std::vector<VkDescriptorSetLayout> set_layouts;
 	set_layouts.reserve(in_create_info.set_layouts.size());
+
+	uint32_t descriptor_type_mask = 0;
+
 	for(const auto& set : in_create_info.set_layouts)
 	{
 		std::vector<VkDescriptorSetLayoutBinding> bindings;
@@ -686,6 +745,11 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_pipeline_layout(c
 			info.binding = binding.binding;
 			info.pImmutableSamplers = nullptr;
 			bindings.emplace_back(info);
+
+			if(~descriptor_type_mask & (1 << info.descriptorType))
+			{
+				descriptor_type_mask |= 1 << info.descriptorType;
+			}
 		}
 		
 		VkDescriptorSetLayoutCreateInfo create_info = {};
@@ -731,7 +795,7 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_pipeline_layout(c
 	if(result != VK_SUCCESS)
 		return make_error(convert_result(result));
 
-	auto ret = new_resource<VulkanPipelineLayout>(*this, layout, set_layouts);
+	auto ret = new_resource<VulkanPipelineLayout>(*this, layout, set_layouts, descriptor_type_mask);
 	auto* layout_object = get_resource<VulkanPipelineLayout>(ret.get());
 
 	/** Create allocators */
@@ -1013,11 +1077,25 @@ void VulkanDevice::cmd_draw(const BackendDeviceResource& in_list,
 	const uint32_t in_first_vertex,
 	const uint32_t in_first_instance)
 {
-	vkCmdDraw(
-		get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+	vkCmdDraw(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
 		in_vertex_count,
 		in_instance_count,
 		in_first_vertex,
+		in_first_instance);
+}
+
+void VulkanDevice::cmd_draw_indexed(const BackendDeviceResource& in_list, 
+	const uint32_t in_index_count, 
+	const uint32_t in_instance_count, 
+	const uint32_t in_first_index, 
+	const int32_t in_vertex_offset, 
+	const uint32_t in_first_instance)
+{
+	vkCmdDrawIndexed(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+		in_index_count,
+		in_instance_count,
+		in_first_index,
+		in_vertex_offset,
 		in_first_instance);
 }
 
@@ -1056,6 +1134,17 @@ void VulkanDevice::cmd_bind_vertex_buffers(const BackendDeviceResource& in_list,
 		static_cast<uint32_t>(buffers.size()),
 		buffers.data(),
 		in_offsets.data());
+}
+
+void VulkanDevice::cmd_bind_index_buffer(const BackendDeviceResource in_list, 
+	const BackendDeviceResource in_index_buffer,
+	const uint64_t in_offset,
+	const IndexType in_index_type)
+{
+	vkCmdBindIndexBuffer(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+		get_resource<VulkanBuffer>(in_index_buffer)->get_buffer(),
+		in_offset,
+		in_index_type == IndexType::Uint16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
 }
 
 void VulkanDevice::cmd_set_viewports(const BackendDeviceResource& in_list, 

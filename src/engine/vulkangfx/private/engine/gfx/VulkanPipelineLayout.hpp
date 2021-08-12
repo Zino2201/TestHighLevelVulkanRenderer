@@ -19,20 +19,22 @@ class VulkanPipelineLayout final
 public:
 	VulkanPipelineLayout(VulkanDevice& in_device, 
 		VkPipelineLayout in_pipeline_layout,
-		const std::vector<VkDescriptorSetLayout>& in_set_layouts);
+		const std::vector<VkDescriptorSetLayout>& in_set_layouts,
+		const uint32_t in_descriptor_type_mask);
 	VulkanPipelineLayout(VulkanPipelineLayout&& in_other) noexcept = delete;
 	
 	~VulkanPipelineLayout();
 
 	[[nodiscard]] VulkanDevice& get_device() const { return device; }
 	[[nodiscard]] VkPipelineLayout get_pipeline_layout() const { return pipeline_layout; }
+	[[nodiscard]] uint32_t get_descriptor_type_mask() const { return descriptor_type_mask; }
 private:
 	void allocate_pool();
 private:
 	VulkanDevice& device;
 	VkPipelineLayout pipeline_layout;
 	std::vector<VkDescriptorSetLayout> set_layouts;
-	std::vector<VkDescriptorPoolSize> descriptor_pool_sizes;
+	uint32_t descriptor_type_mask;
 	std::array<size_t, max_descriptor_sets> allocator_indices;
 	std::array<VulkanDescriptorSetAllocator*, max_descriptor_sets> allocators;
 };

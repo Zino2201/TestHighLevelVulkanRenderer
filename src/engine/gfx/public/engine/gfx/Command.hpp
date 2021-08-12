@@ -71,4 +71,10 @@ struct BufferTextureCopyRegion
 		texture_extent(in_extent) {}
 };
 
+enum class IndexType
+{
+	Uint16,
+	Uint32
+};
+
 }

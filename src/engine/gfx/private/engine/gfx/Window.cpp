@@ -32,7 +32,7 @@ Window::Window(const uint32_t in_width,
 
 	/** Binds callbacks */
 	glfwSetWindowSizeCallback(window, &on_window_size_changed);
-
+	
 	if(flags & WindowFlagBits::Centered)
 	{
 		GLFWmonitor* monitor = glfwGetPrimaryMonitor();

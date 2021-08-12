@@ -32,8 +32,7 @@ class VulkanDescriptorSetAllocator
 public:
 	VulkanDescriptorSetAllocator(VulkanDevice& in_device,
 		VulkanPipelineLayout& in_pipeline_layout,
-		VkDescriptorSetLayout in_set_layout) : device(in_device),
-		pipeline_layout(in_pipeline_layout), set_layout(in_set_layout) {}
+		VkDescriptorSetLayout in_set_layout);
 	~VulkanDescriptorSetAllocator();
 
 	void new_frame();
@@ -46,6 +45,7 @@ private:
 	VkDescriptorSetLayout set_layout;
 	std::vector<VkDescriptorPool> pools;
 	std::queue<VkDescriptorSet> free_sets;
+	std::vector<VkDescriptorPoolSize> pool_sizes;
 	HashMapType hashmap;
 };
 

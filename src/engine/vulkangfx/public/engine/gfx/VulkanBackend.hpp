@@ -24,9 +24,13 @@ public:
 	
 	[[nodiscard]] const std::string& get_error() const { return error; }
 	[[nodiscard]] VkInstance get_instance() const { return instance.instance; }
+	[[nodiscard]] bool has_debug_layers() const { return debug_layers_enabled; }
 private:
 	vkb::Instance instance;
 	std::string error;
+	bool debug_layers_enabled;
+public:
+	PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT;
 };
 #endif
 

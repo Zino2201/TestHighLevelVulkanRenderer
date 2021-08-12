@@ -6,7 +6,7 @@ namespace cb::gfx
 {
 
 VulkanBackend::VulkanBackend(const BackendFlags& in_flags)
-	: Backend(in_flags)
+	: Backend(in_flags), debug_layers_enabled(false)
 {
 	shader_language = ShaderLanguage::VK_SPIRV;
 	supported_shader_models = { ShaderModel::SM6_0, ShaderModel::SM6_5 };
@@ -19,7 +19,11 @@ VulkanBackend::VulkanBackend(const BackendFlags& in_flags)
 	/** Customize our instance based on the flags */
 	if(in_flags & BackendFlagBits::DebugLayers)
 	{
+		debug_layers_enabled = true;
 		builder.enable_validation_layers();
+		builder.add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
+		builder.add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT);
+		builder.add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
 		builder.set_debug_callback(
 			[](VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
 				VkDebugUtilsMessageTypeFlagsEXT message_type,
@@ -33,6 +37,7 @@ VulkanBackend::VulkanBackend(const BackendFlags& in_flags)
 				switch(message_severity)
 				{
 				default:
+					logger::verbose(log_vulkan, "[{}] {}", type, callback_data->pMessage);
 					break;
 				case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
 					logger::info(log_vulkan, "[{}] {}", type, callback_data->pMessage);
@@ -49,6 +54,7 @@ VulkanBackend::VulkanBackend(const BackendFlags& in_flags)
 				return VK_FALSE;
 			}
 	    );
+
 	}
 
 	/** Create instance */
@@ -62,6 +68,10 @@ VulkanBackend::VulkanBackend(const BackendFlags& in_flags)
 
 		instance = result.value();
 	}
+
+	if(has_debug_layers())
+		vkSetDebugUtilsObjectNameEXT = reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(vkGetInstanceProcAddr(
+		instance.instance, "vkSetDebugUtilsObjectNameEXT"));
 }
 
 VulkanBackend::~VulkanBackend()
@@ -85,6 +95,10 @@ cb::Result<std::unique_ptr<BackendDevice>, std::string> VulkanBackend::create_de
 		/** We don't have any surfaces yet */
 		phys_device_selector.defer_surface_initialization();
 		phys_device_selector.require_present();
+
+		VkPhysicalDeviceFeatures required_features = {};
+		required_features.fillModeNonSolid = VK_TRUE;
+		phys_device_selector.set_required_features(required_features);
 		auto result = phys_device_selector.select();
 		if(!result)
 		{

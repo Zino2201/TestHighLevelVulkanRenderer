@@ -22,13 +22,15 @@ Texture::~Texture()
 
 TextureView::~TextureView()
 {
-	if(!texture.is_texture_from_swapchain())
+	/** texture maybe a dangling ref, don't access it ! */
+	if(!is_view_from_swapchain)
 		device.get_backend_device()->destroy_texture_view(resource);
 }
 
 Swapchain::Swapchain(Device& in_device,
 	const SwapChainCreateInfo& in_create_info,
-	const BackendDeviceResource& in_swapchain) : BackendResourceWrapper(in_device, in_swapchain),
+	const BackendDeviceResource& in_swapchain,
+	const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_swapchain, in_debug_name),
 	current_image(0)
 {
 	auto bck_textures = device.get_backend_device()->get_swapchain_backbuffers(in_swapchain);
@@ -48,7 +50,8 @@ Swapchain::Swapchain(Device& in_device,
 				SampleCountFlagBits::Count1,
 				TextureUsageFlags(TextureUsageFlagBits::ColorAttachment)),
 			true,
-			texture)));
+			texture,
+			"Swapchain Texture")));
 	}
 	
 	auto bck_views = device.get_backend_device()->get_swapchain_backbuffer_views(in_swapchain);
@@ -64,7 +67,7 @@ Swapchain::Swapchain(Device& in_device,
 				TextureSubresourceRange(TextureAspectFlags(TextureAspectFlagBits::Color), 0, 1, 0, 1)
 			),
 			view,
-			false)));
+			"Swapchain Texture View")));
 		i++;
 	}
 }
@@ -335,7 +338,7 @@ cb::Result<BufferHandle, Result> Device::create_buffer(BufferInfo in_create_info
 	if(!result)
 		return result.get_error();
 
-	auto buffer = buffers.allocate(*this, result.get_value());
+	auto buffer = buffers.allocate(*this, result.get_value(), in_create_info.debug_name);
 	auto handle = cast_resource_ptr<BufferHandle>(buffer);
 	
 	if(!in_create_info.initial_data.empty())
@@ -343,7 +346,7 @@ cb::Result<BufferHandle, Result> Device::create_buffer(BufferInfo in_create_info
 		if(in_create_info.info.mem_usage != MemoryUsage::CpuOnly)
 		{
 			auto staging = create_buffer(BufferInfo::make_staging(in_create_info.info.size,
-				in_create_info.initial_data));
+				in_create_info.initial_data).set_debug_name("Copy Staging Buffer (create_buffer)"));
 			if(!staging)
 			{
 				destroy_buffer(handle);
@@ -382,7 +385,11 @@ cb::Result<TextureHandle, Result> Device::create_texture(TextureInfo in_create_i
 	if(!result)
 		return result.get_error();
 
-	auto texture = textures.allocate(*this, in_create_info.info, false,result.get_value());
+	auto texture = textures.allocate(*this, 
+		in_create_info.info, 
+		false,
+		result.get_value(), 
+		in_create_info.debug_name);
 	auto handle = cast_resource_ptr<TextureHandle>(texture);
 
 	if(!in_create_info.initial_data.empty())
@@ -392,7 +399,7 @@ cb::Result<TextureHandle, Result> Device::create_texture(TextureInfo in_create_i
 
 		/** Create a staging buffer containing our initial data */
 		UniqueBuffer staging(create_buffer(BufferInfo::make_staging(in_create_info.initial_data.size(),
-			in_create_info.initial_data)).get_value());
+			in_create_info.initial_data).set_debug_name("Copy Staging Buffer (create_texture)")).get_value());
 
 		/** Transition our fresh texture to TransferDst */
 		auto list = allocate_cmd_list(QueueType::Gfx);
@@ -406,7 +413,7 @@ cb::Result<TextureHandle, Result> Device::create_texture(TextureInfo in_create_i
 				Offset3D(),
 				Extent3D(texture->get_create_info().width, 
 				texture->get_create_info().height,
-					texture->get_create_info().depth))
+				texture->get_create_info().depth))
 		};
 		cmd_texture_barrier(list,
 			handle,
@@ -437,6 +444,8 @@ cb::Result<TextureHandle, Result> Device::create_texture(TextureInfo in_create_i
 
 cb::Result<TextureViewHandle, Result> Device::create_texture_view(TextureViewInfo in_create_info)
 {
+	CB_CHECK(in_create_info.texture);
+
 	auto texture = cast_handle<Texture>(in_create_info.texture);
 	TextureViewCreateInfo create_info(
 		texture->get_resource(),
@@ -447,67 +456,71 @@ cb::Result<TextureViewHandle, Result> Device::create_texture_view(TextureViewInf
 	if(!result)
 		return result.get_error();
 
-	auto texture_view = texture_views.allocate(*this, *texture, create_info,result.get_value());
+	auto texture_view = texture_views.allocate(*this, 
+		*texture, 
+		create_info,
+		result.get_value(), 
+		in_create_info.debug_name);
 	return make_result(cast_resource_ptr<TextureViewHandle>(texture_view));
 }
 
-cb::Result<ShaderHandle, Result> Device::create_shader(const ShaderCreateInfo& in_create_info)
+cb::Result<ShaderHandle, Result> Device::create_shader(const ShaderInfo& in_create_info)
 {
-	auto result = backend_device->create_shader(in_create_info);
+	auto result = backend_device->create_shader(in_create_info.create_info);
 	if(!result)
 		return result.get_error();
 
-	auto shader = shaders.allocate(*this, result.get_value());
+	auto shader = shaders.allocate(*this, result.get_value(), in_create_info.debug_name);
 	return make_result(cast_resource_ptr<ShaderHandle>(shader));
 }
 
-cb::Result<SwapchainHandle, Result> Device::create_swapchain(const SwapChainCreateInfo& in_create_info)
+cb::Result<SwapchainHandle, Result> Device::create_swapchain(const SwapChainInfo& in_create_info)
 {
-	auto result = backend_device->create_swap_chain(in_create_info);
+	auto result = backend_device->create_swap_chain(in_create_info.create_info);
 	if(!result)
 		return result.get_error();
 
-	auto swapchain = swapchains.allocate(*this, in_create_info, result.get_value());
+	auto swapchain = swapchains.allocate(*this, in_create_info.create_info, result.get_value(), in_create_info.debug_name);
 	return make_result(cast_resource_ptr<SwapchainHandle>(swapchain));
 }
 
-cb::Result<FenceHandle, Result> Device::create_fence(const FenceCreateInfo& in_create_info)
+cb::Result<FenceHandle, Result> Device::create_fence(const FenceInfo& in_create_info)
 {
-	auto result = backend_device->create_fence(in_create_info);
+	auto result = backend_device->create_fence(in_create_info.create_info);
 	if(!result)
 		return result.get_error();
 
-	auto fence = fences.allocate(*this, result.get_value());
+	auto fence = fences.allocate(*this, result.get_value(), in_create_info.debug_name);
 	return make_result(cast_resource_ptr<FenceHandle>(fence));
 }
 
-cb::Result<SemaphoreHandle, Result> Device::create_semaphore(const SemaphoreCreateInfo& in_create_info)
+cb::Result<SemaphoreHandle, Result> Device::create_semaphore(const SemaphoreInfo& in_create_info)
 {
-	auto result = backend_device->create_semaphore(in_create_info);
+	auto result = backend_device->create_semaphore(in_create_info.create_info);
 	if(!result)
 		return result.get_error();
 
-	auto semaphore = semaphores.allocate(*this, result.get_value());
+	auto semaphore = semaphores.allocate(*this, result.get_value(), in_create_info.debug_name);
 	return make_result(cast_resource_ptr<SemaphoreHandle>(semaphore));
 }
 
-cb::Result<PipelineLayoutHandle, Result> Device::create_pipeline_layout(const PipelineLayoutCreateInfo& in_create_info)
+cb::Result<PipelineLayoutHandle, Result> Device::create_pipeline_layout(const PipelineLayoutInfo& in_create_info)
 {
-	auto result = backend_device->create_pipeline_layout(in_create_info);
+	auto result = backend_device->create_pipeline_layout(in_create_info.create_info);
 	if(!result)
 		return result.get_error();
 
-	auto layout = pipeline_layouts.allocate(*this, result.get_value());
+	auto layout = pipeline_layouts.allocate(*this, result.get_value(), in_create_info.debug_name);
 	return make_result(cast_resource_ptr<PipelineLayoutHandle>(layout));
 }
 
-cb::Result<SamplerHandle, Result> Device::create_sampler(const SamplerCreateInfo& in_create_info)
+cb::Result<SamplerHandle, Result> Device::create_sampler(const SamplerInfo& in_create_info)
 {
-	auto result = backend_device->create_sampler(in_create_info);
+	auto result = backend_device->create_sampler(in_create_info.create_info);
 	if(!result)
 		return result.get_error();
 
-	auto sampler = samplers.allocate(*this, result.get_value());
+	auto sampler = samplers.allocate(*this, result.get_value(), in_create_info.debug_name);
 	return make_result(cast_resource_ptr<SamplerHandle>(sampler));
 }
 
@@ -654,12 +667,13 @@ void Device::cmd_begin_render_pass(const CommandListHandle& in_cmd_list,
 	if(in_info.depth_stencil_attachment)
 	{
 		auto view = cast_handle<TextureView>(in_info.depth_stencil_attachment);
+		attachments.emplace_back(view->get_resource());
 		attachment_descriptions.emplace_back(view->get_create_info().format,
 			view->get_texture().get_create_info().sample_count,
 			AttachmentLoadOp::Clear,
 			AttachmentStoreOp::Store,
-			AttachmentLoadOp::Clear,
-			AttachmentStoreOp::Store,
+			AttachmentLoadOp::DontCare,
+			AttachmentStoreOp::DontCare,
 			TextureLayout::Undefined,
 			TextureLayout::DepthStencilAttachment);
 	}
@@ -692,10 +706,12 @@ void Device::cmd_begin_render_pass(const CommandListHandle& in_cmd_list,
 		std::vector<AttachmentReference> resolve_attachments = process_attachments(subpass.resolve_attachments,
 			TextureLayout::ColorAttachment);
 
+		AttachmentReference depth_stencil_attachment;
+
 		/** Depth/stencil attachment always at the end ! */
 		if(in_info.depth_stencil_attachment)
 		{
-			AttachmentReference depth_attachment(static_cast<uint32_t>(attachment_descriptions.size()) - 1,
+			depth_stencil_attachment = AttachmentReference(static_cast<uint32_t>(attachment_descriptions.size()) - 1,
 				subpass.mode == RenderPassInfo::DepthStencilMode::ReadWrite 
 					? TextureLayout::DepthStencilAttachment : TextureLayout::DepthReadOnly);
 		}
@@ -703,7 +719,7 @@ void Device::cmd_begin_render_pass(const CommandListHandle& in_cmd_list,
 		subpasses.push_back(SubpassDescription(input_attachments,
 			color_attachments,
 			resolve_attachments,
-			{},
+			depth_stencil_attachment,
 			{}));
 	}
 	
@@ -722,7 +738,7 @@ void Device::cmd_begin_render_pass(const CommandListHandle& in_cmd_list,
 		in_info.clear_values);
 
 	std::array viewports = { Viewport(0, 0, 
-		static_cast<float>(framebuffer.width), static_cast<float>(framebuffer.height) )};
+		static_cast<float>(framebuffer.width), static_cast<float>(framebuffer.height), 0.f, 1.f )};
 	std::array scissors = { Rect2D(0, 0, framebuffer.width, framebuffer.height )};
 	backend_device->cmd_set_viewports(list->get_resource(), 0, viewports);
 	backend_device->cmd_set_scissors(list->get_resource(), 0, scissors);
@@ -746,6 +762,28 @@ void Device::cmd_draw(const CommandListHandle& in_cmd_list,
 		in_instance_count,
 		in_first_vertex,
 		in_first_index);	
+}
+
+void Device::cmd_draw_indexed(const CommandListHandle& in_list, 
+	const uint32_t in_index_count,
+	const uint32_t in_instance_count, 
+	const uint32_t in_first_index, 
+	const int32_t in_vertex_offset, 
+	const uint32_t in_first_instance)
+{
+	auto list = cast_handle<CommandList>(in_list);
+	if(list->pipeline_state_dirty)
+		update_pipeline_state(list);
+	// TODO: refactor this (update_pipeline_state) to CommandList
+
+	list->update_descriptors();
+
+	backend_device->cmd_draw_indexed(list->get_resource(),
+		in_index_count,
+		in_instance_count,
+		in_first_index,
+		in_vertex_offset,
+		in_first_instance);
 }
 
 void Device::cmd_set_render_pass_state(const CommandListHandle& in_cmd_list, 
@@ -778,6 +816,8 @@ void Device::cmd_bind_ubo(const CommandListHandle& in_cmd_list,
 	const uint32_t in_binding, 
 	const BufferHandle& in_handle)
 {
+	CB_CHECK(in_handle);
+
 	auto list = cast_handle<CommandList>(in_cmd_list);
 	list->descriptors[in_set][in_binding] = Descriptor::make_buffer_info(DescriptorType::UniformBuffer,
 		in_binding,
@@ -790,6 +830,8 @@ void Device::cmd_bind_texture_view(const CommandListHandle& in_cmd_list,
 	const uint32_t in_binding, 
 	const TextureViewHandle& in_handle)
 {
+	CB_CHECK(in_handle);
+
 	auto list = cast_handle<CommandList>(in_cmd_list);
 	list->descriptors[in_set][in_binding] = Descriptor::make_texture_view_info(in_binding,
 		cast_handle<TextureView>(in_handle)->get_resource());
@@ -801,6 +843,8 @@ void Device::cmd_bind_sampler(const CommandListHandle& in_cmd_list,
 	const uint32_t in_binding, 
 	const SamplerHandle& in_handle)
 {
+	CB_CHECK(in_handle);
+
 	auto list = cast_handle<CommandList>(in_cmd_list);
 	list->descriptors[in_set][in_binding] = Descriptor::make_sampler_info(in_binding,
 		cast_handle<Sampler>(in_handle)->get_resource());
@@ -820,6 +864,17 @@ void Device::cmd_bind_vertex_buffer(const CommandListHandle& in_cmd_list, const 
 		0,
 		vertex_buffers,
 		offsets);	
+}
+
+void Device::cmd_bind_index_buffer(const CommandListHandle& in_cmd_list, 
+	const BufferHandle& in_buffer, 
+	const uint64_t in_offset, 
+	const IndexType in_index_type)
+{
+	backend_device->cmd_bind_index_buffer(cast_handle<CommandList>(in_cmd_list)->get_resource(),
+		cast_handle<Buffer>(in_buffer)->get_resource(),
+		in_offset,
+		in_index_type);
 }
 
 void Device::cmd_copy_buffer(const CommandListHandle& in_cmd_list, 

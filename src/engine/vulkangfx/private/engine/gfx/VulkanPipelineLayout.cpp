@@ -8,8 +8,9 @@ namespace cb::gfx
 
 VulkanPipelineLayout::VulkanPipelineLayout(VulkanDevice& in_device, 
 	VkPipelineLayout in_pipeline_layout,
-	const std::vector<VkDescriptorSetLayout>& in_set_layouts) : device(in_device), pipeline_layout(in_pipeline_layout),
-	set_layouts(in_set_layouts)
+	const std::vector<VkDescriptorSetLayout>& in_set_layouts,
+	const uint32_t in_descriptor_type_mask) : device(in_device), pipeline_layout(in_pipeline_layout),
+	set_layouts(in_set_layouts), descriptor_type_mask(in_descriptor_type_mask)
 {
 
 }

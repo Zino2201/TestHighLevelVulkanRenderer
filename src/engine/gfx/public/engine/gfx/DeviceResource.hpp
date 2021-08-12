@@ -18,6 +18,7 @@ enum class DeviceResourceType : uint8_t
 	Buffer,
 	Texture,
 	TextureView,
+	CommandPool,
 	CommandList,
 	Pipeline,
 	PipelineLayout,
@@ -80,5 +81,41 @@ using SwapchainHandle = detail::DeviceResource<DeviceResourceType::Swapchain>;
 using FenceHandle = detail::DeviceResource<DeviceResourceType::Fence>;
 using SemaphoreHandle = detail::DeviceResource<DeviceResourceType::Semaphore>;
 using SamplerHandle = detail::DeviceResource<DeviceResourceType::Sampler>;
+
+}
+
+namespace std
+{
+
+inline std::string to_string(const cb::gfx::DeviceResourceType& in_type)
+{
+	switch(in_type)
+	{
+	default:
+		return "Unknown";
+	case cb::gfx::DeviceResourceType::Buffer:
+		return "Buffer";
+	case cb::gfx::DeviceResourceType::Texture:
+		return "Texture";
+	case cb::gfx::DeviceResourceType::TextureView:
+		return "TextureView";
+	case cb::gfx::DeviceResourceType::Sampler:
+		return "Sampler";
+	case cb::gfx::DeviceResourceType::Swapchain:
+		return "Swapchain";
+	case cb::gfx::DeviceResourceType::Pipeline:
+		return "Pipeline";
+	case cb::gfx::DeviceResourceType::Shader:
+		return "Shader";
+	case cb::gfx::DeviceResourceType::CommandList:
+		return "CommandList";
+	case cb::gfx::DeviceResourceType::Fence:
+		return "Fence";
+	case cb::gfx::DeviceResourceType::PipelineLayout:
+		return "PipelineLayout";
+	case cb::gfx::DeviceResourceType::Semaphore:
+		return "Semaphore";
+	}
+}
 
 }

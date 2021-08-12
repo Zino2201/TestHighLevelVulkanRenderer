@@ -39,6 +39,9 @@ public:
 
 	virtual void new_frame() = 0;
 	virtual void wait_idle() = 0;
+	virtual void set_resource_name(const std::string_view& in_name, 
+		const DeviceResourceType in_type, 
+		const BackendDeviceResource in_handle) = 0;
 
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_buffer(const BufferCreateInfo& in_create_info) = 0;
 	[[nodiscard]] virtual cb::Result<BackendDeviceResource, Result> create_texture(const TextureCreateInfo& in_create_info) = 0;
@@ -106,6 +109,12 @@ public:
 		const uint32_t in_instance_count,
 		const uint32_t in_first_vertex,
 		const uint32_t in_first_instance) = 0;
+	virtual void cmd_draw_indexed(const BackendDeviceResource& in_list,
+		const uint32_t in_index_count,
+		const uint32_t in_instance_count,
+		const uint32_t in_first_index,
+		const int32_t in_vertex_offset,
+		const uint32_t in_first_instance) = 0;
 	virtual void cmd_end_render_pass(const BackendDeviceResource& in_list) = 0;
 
 	virtual void cmd_bind_descriptor_sets(const BackendDeviceResource in_list,
@@ -115,6 +124,10 @@ public:
 		const uint32_t in_first_binding,
 		const std::span<BackendDeviceResource> in_buffers,
 		const std::span<uint64_t> in_offsets) = 0;
+	virtual void cmd_bind_index_buffer(const BackendDeviceResource in_list,
+		const BackendDeviceResource in_index_buffer,
+		const uint64_t in_offset,
+		const IndexType in_index_type) = 0;
 	virtual void cmd_set_viewports(const BackendDeviceResource& in_list,
 		const uint32_t in_first_viewport,
 		const std::span<Viewport>& in_viewports) = 0;

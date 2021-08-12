@@ -40,7 +40,6 @@ struct SamplerCreateInfo
 		const SamplerAddressMode& in_address_mode_v = SamplerAddressMode::Repeat,
 		const SamplerAddressMode& in_address_mode_w = SamplerAddressMode::Repeat,
 		const float in_mip_lod_bias = 0.f,
-		const bool in_enable_compare_op = false,
 		const CompareOp& in_compare_op = CompareOp::Never,
 		const bool in_enable_aniostropy = false,
 		const float in_max_anisotropy = 0.f,
