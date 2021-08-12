@@ -5,3 +5,4 @@
 
 /** Assertions */
 #include "debug/Assertions.hpp"
+#include "UnusedParameters.hpp"

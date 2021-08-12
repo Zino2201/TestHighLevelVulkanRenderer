@@ -108,6 +108,40 @@ Sampler::~Sampler()
 	device.get_backend_device()->destroy_sampler(resource);
 }
 
+/** Command List */
+
+void CommandList::prepare_draw()
+{
+	if(pipeline_state_dirty)
+		update_pipeline_state();
+
+	update_descriptors();
+}
+
+void CommandList::update_pipeline_state()
+{
+	CB_CHECKF(pipeline_layout, "No pipeline layout was bound!");
+	
+	GfxPipelineCreateInfo create_info(material_state.stages,
+		material_state.vertex_input,
+		material_state.input_assembly,
+		material_state.rasterizer,
+		render_pass_state.multisampling,
+		render_pass_state.depth_stencil,
+		render_pass_state.color_blend,
+		Device::cast_handle<PipelineLayout>(pipeline_layout)->get_resource(),
+		render_pass,
+		0);
+	auto pipeline = device.get_or_create_pipeline(create_info);
+	
+	device.get_backend_device()->cmd_bind_pipeline(
+		resource,
+		PipelineBindPoint::Gfx,
+		pipeline);
+	
+	pipeline_state_dirty = false;	
+}
+
 void CommandList::update_descriptors()
 {
 	if(dirty_sets_mask == 0)
@@ -726,7 +760,7 @@ void Device::cmd_begin_render_pass(const CommandListHandle& in_cmd_list,
 	auto render_pass = get_or_create_render_pass(RenderPassCreateInfo(attachment_descriptions, subpasses));
 	auto list = cast_handle<CommandList>(in_cmd_list);
 
-	list->render_pass = render_pass;
+	list->set_render_pass(render_pass);
 
 	framebuffer.attachments = attachments;
 	
@@ -751,11 +785,7 @@ void Device::cmd_draw(const CommandListHandle& in_cmd_list,
 	const uint32_t in_first_index)
 {
 	auto list = cast_handle<CommandList>(in_cmd_list);
-	if(list->pipeline_state_dirty)
-		update_pipeline_state(list);
-	// TODO: refactor this (update_pipeline_state) to CommandList
-
-	list->update_descriptors();
+	list->prepare_draw();
 
 	backend_device->cmd_draw(list->get_resource(),
 		in_vertex_count,
@@ -772,11 +802,7 @@ void Device::cmd_draw_indexed(const CommandListHandle& in_list,
 	const uint32_t in_first_instance)
 {
 	auto list = cast_handle<CommandList>(in_list);
-	if(list->pipeline_state_dirty)
-		update_pipeline_state(list);
-	// TODO: refactor this (update_pipeline_state) to CommandList
-
-	list->update_descriptors();
+	list->prepare_draw();
 
 	backend_device->cmd_draw_indexed(list->get_resource(),
 		in_index_count,
@@ -791,8 +817,7 @@ void Device::cmd_set_render_pass_state(const CommandListHandle& in_cmd_list,
 {
 	auto list = cast_handle<CommandList>(in_cmd_list);
 
-	list->render_pass_state = in_state;	
-	list->pipeline_state_dirty = true;
+	list->set_render_pass_state(in_state);
 }
 
 void Device::cmd_set_material_state(const CommandListHandle& in_cmd_list, 
@@ -800,15 +825,14 @@ void Device::cmd_set_material_state(const CommandListHandle& in_cmd_list,
 {
 	auto list = cast_handle<CommandList>(in_cmd_list);
 
-	list->material_state = in_state;
-	list->pipeline_state_dirty = true;
+	list->set_material_state(in_state);
 }
 
 void Device::cmd_bind_pipeline_layout(const CommandListHandle& in_cmd_list, 
 	const PipelineLayoutHandle& in_handle)
 {
 	auto list = cast_handle<CommandList>(in_cmd_list);
-	list->pipeline_layout = in_handle;
+	list->set_pipeline_layout(in_handle);
 }
 
 void Device::cmd_bind_ubo(const CommandListHandle& in_cmd_list, 
@@ -819,10 +843,9 @@ void Device::cmd_bind_ubo(const CommandListHandle& in_cmd_list,
 	CB_CHECK(in_handle);
 
 	auto list = cast_handle<CommandList>(in_cmd_list);
-	list->descriptors[in_set][in_binding] = Descriptor::make_buffer_info(DescriptorType::UniformBuffer,
+	list->set_descriptor(in_set, in_binding, Descriptor::make_buffer_info(DescriptorType::UniformBuffer,
 		in_binding,
-		cast_handle<Buffer>(in_handle)->get_resource());
-	list->dirty_sets_mask = 1 << in_set;
+		cast_handle<Buffer>(in_handle)->get_resource()));
 }
 
 void Device::cmd_bind_texture_view(const CommandListHandle& in_cmd_list, 
@@ -833,9 +856,8 @@ void Device::cmd_bind_texture_view(const CommandListHandle& in_cmd_list,
 	CB_CHECK(in_handle);
 
 	auto list = cast_handle<CommandList>(in_cmd_list);
-	list->descriptors[in_set][in_binding] = Descriptor::make_texture_view_info(in_binding,
-		cast_handle<TextureView>(in_handle)->get_resource());
-	list->dirty_sets_mask = 1 << in_set;
+	list->set_descriptor(in_set, in_binding, Descriptor::make_texture_view_info(in_binding,
+		cast_handle<TextureView>(in_handle)->get_resource()));
 }
 
 void Device::cmd_bind_sampler(const CommandListHandle& in_cmd_list, 
@@ -846,9 +868,8 @@ void Device::cmd_bind_sampler(const CommandListHandle& in_cmd_list,
 	CB_CHECK(in_handle);
 
 	auto list = cast_handle<CommandList>(in_cmd_list);
-	list->descriptors[in_set][in_binding] = Descriptor::make_sampler_info(in_binding,
-		cast_handle<Sampler>(in_handle)->get_resource());
-	list->dirty_sets_mask = 1 << in_set;
+	list->set_descriptor(in_set, in_binding, Descriptor::make_sampler_info(in_binding,
+		cast_handle<Sampler>(in_handle)->get_resource()));
 }
 
 void Device::cmd_end_render_pass(const CommandListHandle& in_cmd_list)
@@ -981,30 +1002,6 @@ TextureViewHandle Device::get_swapchain_backbuffer_view(const SwapchainHandle& i
 BackendDeviceResource Device::get_swapchain_backend_handle(const SwapchainHandle& in_swapchain) const
 {
 	return cast_handle<Swapchain>(in_swapchain)->get_resource();
-}
-
-void Device::update_pipeline_state(CommandList* in_cmd_list)
-{
-	CB_CHECKF(in_cmd_list->pipeline_layout, "No pipeline layout was bound!");
-	
-	GfxPipelineCreateInfo create_info(in_cmd_list->material_state.stages,
-		in_cmd_list->material_state.vertex_input,
-		in_cmd_list->material_state.input_assembly,
-		in_cmd_list->material_state.rasterizer,
-		in_cmd_list->render_pass_state.multisampling,
-		in_cmd_list->render_pass_state.depth_stencil,
-		in_cmd_list->render_pass_state.color_blend,
-		cast_handle<PipelineLayout>(in_cmd_list->pipeline_layout)->get_resource(),
-		in_cmd_list->render_pass,
-		0);
-	auto pipeline = get_or_create_pipeline(create_info);
-	
-	backend_device->cmd_bind_pipeline(
-		in_cmd_list->get_resource(),
-		PipelineBindPoint::Gfx,
-		pipeline);
-	
-	in_cmd_list->pipeline_state_dirty = false;	
 }
 
 BackendDeviceResource Device::get_or_create_render_pass(const RenderPassCreateInfo& in_create_info)

@@ -96,8 +96,8 @@ void VulkanDevice::new_frame()
 	framebuffer_manager.new_frame();
 	
 	/** Update descriptor sets */
-	for(auto& allocator : descriptor_set_allocators)
-		allocator.new_frame();
+	for(auto& set_allocator : descriptor_set_allocators)
+		set_allocator.new_frame();
 }
 
 void VulkanDevice::set_resource_name(const std::string_view& in_name, 
@@ -476,7 +476,7 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_render_pass(const
 		std::vector<VkAttachmentReference> input_attachments;
 		std::vector<VkAttachmentReference> color_attachments;
 		std::vector<VkAttachmentReference> resolve_attachments;
-		VkAttachmentReference depth_stencil_attachment;
+		VkAttachmentReference depth_stencil_attachment = {};
 	};
 
 	std::vector<Subpass> subpass_holders;

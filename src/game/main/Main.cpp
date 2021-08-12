@@ -498,7 +498,7 @@ int main()
 		device->present(swapchain.get(), present_wait_semaphores);
 
 		using namespace std::chrono_literals;
-		std::this_thread::sleep_for(6ms);
+		//std::this_thread::sleep_for(6ms);
 	}
 
 	

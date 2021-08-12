@@ -75,6 +75,8 @@ public:
 		device.get_backend_device()->set_resource_name(debug_name, 
 			Type,
 			in_resource);
+#else
+		(void)(in_debug_name);
 #endif
 	}
 
@@ -193,8 +195,6 @@ public:
 
 class CommandList : public BackendResourceWrapper<DeviceResourceType::CommandList>
 {
-	friend class Device;
-	
 public:
 	CommandList(Device& in_device,
 		const BackendDeviceResource& in_list,
@@ -202,9 +202,21 @@ public:
 		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_list, in_debug_name),
 		type(in_type), pipeline_state_dirty(false), dirty_sets_mask(0) {}
 
-	void update_descriptors();
+	void prepare_draw();
+	void set_render_pass(const BackendDeviceResource& in_handle) { render_pass = in_handle; }
+	void set_pipeline_layout(const PipelineLayoutHandle& in_handle) { pipeline_layout = in_handle; pipeline_state_dirty = true; }
+	void set_render_pass_state(const PipelineRenderPassState& in_state) { render_pass_state = in_state; pipeline_state_dirty = true; }
+	void set_material_state(const PipelineMaterialState& in_state) { material_state = in_state; pipeline_state_dirty = true; }
+	void set_descriptor(size_t in_set, size_t in_binding, const Descriptor& in_descriptor)
+	{
+		descriptors[in_set][in_binding] = in_descriptor;
+		dirty_sets_mask = 1 << in_set;
+	}
 
 	[[nodiscard]] QueueType get_queue_type() const { return type; }
+private:
+	void update_pipeline_state();
+	void update_descriptors();
 private:
 	QueueType type;
 	PipelineLayoutHandle pipeline_layout;
@@ -213,6 +225,8 @@ private:
 	PipelineMaterialState material_state;
 	bool pipeline_state_dirty;
 	std::array<std::array<Descriptor, max_bindings>, max_descriptor_sets> descriptors;
+
+	/** Bitmask used to keep track of which descriptor sets to update */
 	uint8_t dirty_sets_mask;
 };
 
@@ -524,6 +538,7 @@ struct RenderPassInfo
 class Device final
 {
 	friend class detail::Swapchain;
+	friend class detail::CommandList;
 	
 	struct Frame
 	{
@@ -709,7 +724,6 @@ public:
 
 	[[nodiscard]] BackendDevice* get_backend_device() const { return backend_device.get(); }
 private:
-	void update_pipeline_state(detail::CommandList* in_cmd_list);
 	void submit_queue(const QueueType& in_type);
 	BackendDeviceResource get_or_create_render_pass(const RenderPassCreateInfo& in_create_info);
 	BackendDeviceResource get_or_create_pipeline(const GfxPipelineCreateInfo& in_create_info);

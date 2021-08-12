@@ -14,6 +14,8 @@ inline VkFilter convert_filter(Filter in_filter)
 	case Filter::Nearest:
 		return VK_FILTER_NEAREST;
 	}
+
+	CB_UNREACHABLE();
 }
 
 inline VkSamplerMipmapMode convert_filter_mipmap_mode(Filter in_filter)
@@ -25,6 +27,8 @@ inline VkSamplerMipmapMode convert_filter_mipmap_mode(Filter in_filter)
 	case Filter::Nearest:
 		return VK_SAMPLER_MIPMAP_MODE_NEAREST;
 	}
+
+	CB_UNREACHABLE();
 }
 
 inline VkSamplerAddressMode convert_address_mode(SamplerAddressMode in_address_mode)
@@ -40,6 +44,8 @@ inline VkSamplerAddressMode convert_address_mode(SamplerAddressMode in_address_m
 	case SamplerAddressMode::ClampToEdge:
 		return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 	}
+
+	CB_UNREACHABLE();
 }
 
 }

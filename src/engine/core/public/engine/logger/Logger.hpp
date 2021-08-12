@@ -6,6 +6,7 @@
 #include <string_view>
 #include "engine/debug/Assertions.hpp"
 #include <fmt/format.h>
+#include "engine/UnusedParameters.hpp"
 
 namespace cb::logger
 {
@@ -78,8 +79,11 @@ void logf(SeverityFlagBits in_severity, const Category& in_category,
 template<typename... Args>
 void verbose(const Category& in_category, const std::string_view& in_format, Args&&... in_args)
 {
+
 #if CB_BUILD(DEBUG)
 	logf(SeverityFlagBits::Verbose, in_category, in_format, std::forward<Args>(in_args)...);
+#else
+	UnusedParameters { in_category, in_format, in_args... };
 #endif
 }
 
