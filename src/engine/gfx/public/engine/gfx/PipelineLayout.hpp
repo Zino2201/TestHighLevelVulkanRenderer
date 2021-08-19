@@ -34,6 +34,8 @@ struct DescriptorSetLayoutBinding
 struct DescriptorSetLayoutCreateInfo
 {
 	std::span<DescriptorSetLayoutBinding> bindings;
+
+	DescriptorSetLayoutCreateInfo(const std::span<DescriptorSetLayoutBinding>& in_bindings = {}) : bindings(in_bindings) {}
 };
 
 struct PushConstantRange
@@ -103,7 +105,7 @@ struct Descriptor
 		Descriptor descriptor;
 		descriptor.type = in_type;
 		descriptor.binding = in_binding;
-		descriptor.info = DescriptorBufferInfo(in_handle, 0, -1);
+		descriptor.info = DescriptorBufferInfo(in_handle, 0, std::numeric_limits<uint64_t>::max());
 		return descriptor;
 	}
 
@@ -133,6 +135,10 @@ struct PipelineLayoutCreateInfo
 {
 	std::span<DescriptorSetLayoutCreateInfo> set_layouts;
 	std::span<PushConstantRange> push_constant_ranges;
+
+	PipelineLayoutCreateInfo(const std::span<DescriptorSetLayoutCreateInfo>& in_set_layouts,
+		const std::span<PushConstantRange>& in_push_constant_ranges = {}) : set_layouts(in_set_layouts),
+	push_constant_ranges(in_push_constant_ranges) {}
 };
 
 static constexpr int max_descriptor_sets = 4;

@@ -8,13 +8,14 @@ namespace cb::gfx
 VulkanBackend::VulkanBackend(const BackendFlags& in_flags)
 	: Backend(in_flags), debug_layers_enabled(false)
 {
+	name = "Vulkan";
 	shader_language = ShaderLanguage::VK_SPIRV;
 	supported_shader_models = { ShaderModel::SM6_0, ShaderModel::SM6_5 };
 	
 	vkb::InstanceBuilder builder;
 	builder.set_app_name("CityBuilder");
 	builder.set_engine_name("ze_cb");
-	builder.require_api_version(1, 0, 0);
+	builder.require_api_version(1, 2, 0);
 	
 	/** Customize our instance based on the flags */
 	if(in_flags & BackendFlagBits::DebugLayers)

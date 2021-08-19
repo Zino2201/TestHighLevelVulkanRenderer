@@ -46,7 +46,9 @@ public:
 	 */
 	[[nodiscard]] const auto& get_supported_shader_models() const { return supported_shader_models;}
 	[[nodiscard]] const auto& get_shader_language() const { return shader_language;}
+	[[nodiscard]] std::string_view get_name() const { return name; }
 protected:
+	std::string name;
 	ShaderLanguage shader_language;
 	std::vector<ShaderModel> supported_shader_models;
 };

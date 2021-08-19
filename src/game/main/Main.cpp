@@ -15,6 +15,11 @@
 #include <stb_image.h>
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tinyobjloader.h"
+#include <Windows.h>
+#include <Unknwn.h>
+#include <dxcapi.h>
+#include <engine/imgui/ImGui.hpp>
+#include <backends/imgui_impl_glfw.h>
 
 std::vector<char> read_binary_file(const std::string& in_name)
 {
@@ -29,6 +34,21 @@ std::vector<char> read_binary_file(const std::string& in_name)
 
 	return buffer;
 }
+
+std::vector<char> read_text_file(const std::string& in_name)
+{
+	std::ifstream file(in_name, std::ios::ate | std::ios::binary);
+
+	const size_t file_size = file.tellg();
+	
+	std::vector<char> buffer(file_size);
+	file.seekg(0);
+	file.read(buffer.data(), file_size);
+	file.close();
+
+	return buffer;
+}
+
 
 #include <glm/glm.hpp>
 
@@ -61,6 +81,59 @@ struct UBO
 	glm::mat4 view;
 	glm::mat4 proj;
 };
+
+std::vector<uint8_t> compile_shader(bool in_vs, std::span<uint8_t> in_source)
+{
+	cb::logger::info("Compiling shader");
+
+	std::vector<LPCWSTR> args =
+	{
+		L"-E main", L" ",
+		L"-Qstrip_debug", L" ",
+		L"-Qstrip_reflect", L" ",
+		L"-spirv", L" ",
+		L"-WX", L" ",
+		L"-Zpr", L" ",
+	};
+
+	if(in_vs)
+		args.emplace_back(L"-T vs_6_0");
+	else
+		args.emplace_back(L"-T ps_6_0");
+
+	IDxcCompiler3* compiler = nullptr;
+	DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler));
+
+	IDxcUtils* utils = nullptr;
+	DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&utils));
+
+	IDxcBlobEncoding* blob = nullptr;
+	DxcBuffer buffer { in_source.data(), in_source.size(), DXC_CP_UTF8 };
+	IDxcResult* result = nullptr;
+	HRESULT hr = compiler->Compile(&buffer, args.data(), args.size(), nullptr, IID_PPV_ARGS(&result));
+	
+	std::vector<uint8_t> ret;
+
+	IDxcBlobUtf8* errors;
+	result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr);
+	if(errors && errors->GetStringLength() > 0)
+		cb::logger::fatal("Shader compiling error: {}", errors->GetStringPointer());
+
+	IDxcBlob* bytecode;
+	result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&bytecode), nullptr);
+	if(bytecode)
+		ret = { (uint8_t*) bytecode->GetBufferPointer(),
+		(uint8_t*) bytecode->GetBufferPointer() + bytecode->GetBufferSize() };
+
+	result->Release();
+	utils->Release();
+
+	if(blob)
+		blob->Release();
+	compiler->Release();
+
+	return ret;
+}
 
 int main()
 {
@@ -102,9 +175,10 @@ int main()
 		win.get_width(),
 		win.get_height())).get_value());
 
-
-	auto vert_spv = read_binary_file("vert.spv");
-	auto frag_spv = read_binary_file("frag.spv");
+	auto vert_src = read_text_file("vert.hlsl");
+	auto frag_src = read_text_file("frag.hlsl");
+	auto vert_spv = compile_shader(true, { (uint8_t*) vert_src.data(), (uint8_t*) vert_src.data() + vert_src.size() });
+	auto frag_spv = compile_shader(false, { (uint8_t*) frag_src.data(), (uint8_t*) frag_src.data() + frag_src.size() });
 
 	UniqueShader vert_shader(device->create_shader(ShaderCreateInfo(
 		{ (uint32_t*) vert_spv.data(), vert_spv.size() })).get_value());
@@ -201,7 +275,6 @@ int main()
 			sky_indices.push_back(sky_indices.size());
 		}
 	}
-
 
 	UniqueBuffer vertex_buffer(device->create_buffer(BufferInfo(BufferCreateInfo(
 		sizeof(Vertex) * vertices.size(),
@@ -319,6 +392,10 @@ int main()
 	float cam_pitch = 0.f, cam_yaw = 0.f;
 	glfwSetInputMode(win.get_handle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
+	ImGui::SetCurrentContext(ImGui::CreateContext());
+	ui::initialize_imgui();
+	ImGui_ImplGlfw_InitForOther(win.get_handle(), true);
+
 	while(!glfwWindowShouldClose(win.get_handle()))
 	{
 		glfwPollEvents();
@@ -332,7 +409,15 @@ int main()
 		static auto start_time = std::chrono::high_resolution_clock::now();
 		auto current_time = std::chrono::high_resolution_clock::now();
 		float delta_time = std::chrono::duration<float, std::chrono::seconds::period>(current_time - start_time).count();
-	
+
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+		ImGui::Text("%s (Shader Model: %s, Shader Format: %s)", result.get_value()->get_name().data(),
+			std::to_string(ShaderModel::SM6_0).c_str(),
+			std::to_string(result.get_value()->get_shader_language()).c_str());
+		ImGui::Text("%.0f FPS", 1.f / ImGui::GetIO().DeltaTime, ImGui::GetIO().DeltaTime );
+		ImGui::Text("%.2f ms", ImGui::GetIO().DeltaTime * 1000);
+		ImGui::Render();
 
 		double xpos = 0.f, ypos = 0.f;
 		static double last_xpos = 0.f;
@@ -363,10 +448,12 @@ int main()
 		fwd = glm::normalize(fwd);
 
 		glm::vec3 right = glm::normalize(glm::cross(fwd, glm::vec3(0, 0, 1)));
-		if (glfwGetKey(win.get_handle(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
+		if (glfwGetKey(win.get_handle(), GLFW_KEY_ESCAPE) == GLFW_PRESS &&
+			!ImGui::GetIO().WantCaptureKeyboard)
 			glfwSetInputMode(win.get_handle(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 
-		if(glfwGetMouseButton(win.get_handle(), GLFW_MOUSE_BUTTON_LEFT))
+		if(glfwGetMouseButton(win.get_handle(), GLFW_MOUSE_BUTTON_LEFT) &&
+			!ImGui::GetIO().WantCaptureMouse)
 			glfwSetInputMode(win.get_handle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 		float cam_speed = 0.0015f;
@@ -378,7 +465,7 @@ int main()
 		    cam_pos += right * cam_speed * delta_time;
 		if (glfwGetKey(win.get_handle(), GLFW_KEY_D) == GLFW_PRESS)
 		    cam_pos -= right * cam_speed * delta_time;
-
+	
 
 		last_xpos = xpos;
 		last_ypos = ypos;
@@ -491,6 +578,10 @@ int main()
 			device->cmd_bind_ubo(list, 0, 0, ubos[i].get());
 			device->cmd_draw_indexed(list, index_count, 1, 0, 0, 0);
 		}
+
+		device->cmd_bind_texture_view(list, 0, 3, TextureViewHandle());
+		ui::draw_imgui(list);
+
 		device->cmd_end_render_pass(list);
 		device->submit(list, render_wait_semaphores, render_finished_semaphores);
 		device->end_frame();
@@ -501,8 +592,10 @@ int main()
 		std::this_thread::sleep_for(6ms);
 	}
 
-	
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
+	ui::destroy_imgui();
 	glfwTerminate();
-	
+
 	return 0;
 }

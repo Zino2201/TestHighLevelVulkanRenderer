@@ -199,15 +199,15 @@ Device::~Device()
 	for(auto& [create_info, rp] : render_passes)
 		get_backend_device()->destroy_render_pass(rp);
 
-	CB_CHECKF(buffers.get_size() == 0, "Some resources have not been freed before deleting the device!");
-	CB_CHECKF(textures.get_size() == 0, "Some resources have not been freed before deleting the device!");
-	CB_CHECKF(texture_views.get_size() == 0, "Some resources have not been freed before deleting the device!");
-	CB_CHECKF(swapchains.get_size() == 0, "Some resources have not been freed before deleting the device!");
-	CB_CHECKF(pipeline_layouts.get_size() == 0, "Some resources have not been freed before deleting the device!");
-	CB_CHECKF(shaders.get_size() == 0, "Some resources have not been freed before deleting the device!");
-	CB_CHECKF(semaphores.get_size() == 0, "Some resources have not been freed before deleting the device!");
-	CB_CHECKF(fences.get_size() == 0, "Some resources have not been freed before deleting the device!");
-	CB_CHECKF(samplers.get_size() == 0, "Some resources have not been freed before deleting the device!");
+	CB_CHECKF(buffers.get_size() == 0, "Some buffers have not been freed before deleting the device!");
+	CB_CHECKF(textures.get_size() == 0, "Some textures have not been freed before deleting the device!");
+	CB_CHECKF(texture_views.get_size() == 0, "Some textures have not been freed before deleting the device!");
+	CB_CHECKF(swapchains.get_size() == 0, "Some texture views have not been freed before deleting the device!");
+	CB_CHECKF(pipeline_layouts.get_size() == 0, "Some pipeline layouts have not been freed before deleting the device!");
+	CB_CHECKF(shaders.get_size() == 0, "Some shaders have not been freed before deleting the device!");
+	CB_CHECKF(semaphores.get_size() == 0, "Some semaphores have not been freed before deleting the device!");
+	CB_CHECKF(fences.get_size() == 0, "Some fences have not been freed before deleting the device!");
+	CB_CHECKF(samplers.get_size() == 0, "Some samplers have not been freed before deleting the device!");
 
 	/** We can't do this yet as some dtor depends on current_device (get_device()) */
 	//current_device = nullptr;	
@@ -816,7 +816,6 @@ void Device::cmd_set_render_pass_state(const CommandListHandle& in_cmd_list,
 	const PipelineRenderPassState& in_state)
 {
 	auto list = cast_handle<CommandList>(in_cmd_list);
-
 	list->set_render_pass_state(in_state);
 }
 
@@ -824,8 +823,14 @@ void Device::cmd_set_material_state(const CommandListHandle& in_cmd_list,
 	const PipelineMaterialState& in_state)
 {
 	auto list = cast_handle<CommandList>(in_cmd_list);
-
 	list->set_material_state(in_state);
+}
+
+void Device::cmd_set_scissor(const CommandListHandle& in_cmd_list, const Rect2D& in_scissor)
+{
+	auto list = cast_handle<CommandList>(in_cmd_list);
+	std::array scissors = { in_scissor };
+	backend_device->cmd_set_scissors(list->get_resource(), 0, scissors);
 }
 
 void Device::cmd_bind_pipeline_layout(const CommandListHandle& in_cmd_list, 
@@ -840,12 +845,10 @@ void Device::cmd_bind_ubo(const CommandListHandle& in_cmd_list,
 	const uint32_t in_binding, 
 	const BufferHandle& in_handle)
 {
-	CB_CHECK(in_handle);
-
 	auto list = cast_handle<CommandList>(in_cmd_list);
-	list->set_descriptor(in_set, in_binding, Descriptor::make_buffer_info(DescriptorType::UniformBuffer,
+	list->set_descriptor(in_set, in_binding, in_handle ? Descriptor::make_buffer_info(DescriptorType::UniformBuffer,
 		in_binding,
-		cast_handle<Buffer>(in_handle)->get_resource()));
+		in_handle ? cast_handle<Buffer>(in_handle)->get_resource() : null_backend_resource) : Descriptor());
 }
 
 void Device::cmd_bind_texture_view(const CommandListHandle& in_cmd_list, 
@@ -853,11 +856,10 @@ void Device::cmd_bind_texture_view(const CommandListHandle& in_cmd_list,
 	const uint32_t in_binding, 
 	const TextureViewHandle& in_handle)
 {
-	CB_CHECK(in_handle);
-
 	auto list = cast_handle<CommandList>(in_cmd_list);
-	list->set_descriptor(in_set, in_binding, Descriptor::make_texture_view_info(in_binding,
-		cast_handle<TextureView>(in_handle)->get_resource()));
+
+	list->set_descriptor(in_set, in_binding, in_handle ? Descriptor::make_texture_view_info(in_binding,
+		in_handle ? cast_handle<TextureView>(in_handle)->get_resource() : null_backend_resource) : Descriptor());
 }
 
 void Device::cmd_bind_sampler(const CommandListHandle& in_cmd_list, 
@@ -868,8 +870,8 @@ void Device::cmd_bind_sampler(const CommandListHandle& in_cmd_list,
 	CB_CHECK(in_handle);
 
 	auto list = cast_handle<CommandList>(in_cmd_list);
-	list->set_descriptor(in_set, in_binding, Descriptor::make_sampler_info(in_binding,
-		cast_handle<Sampler>(in_handle)->get_resource()));
+	list->set_descriptor(in_set, in_binding, in_handle ? Descriptor::make_sampler_info(in_binding,
+		in_handle ? cast_handle<Sampler>(in_handle)->get_resource() : null_backend_resource) : Descriptor());
 }
 
 void Device::cmd_end_render_pass(const CommandListHandle& in_cmd_list)

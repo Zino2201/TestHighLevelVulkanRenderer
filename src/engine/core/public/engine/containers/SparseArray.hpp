@@ -8,7 +8,7 @@ namespace cb
 {
 
 /**
- * A non-contiguous array that guarantee element's positions to be fixed
+ * A non-contiguous array that guarantee element's positions to be fixed (but no stable references!)
  */
 template<typename T>
 class SparseArray

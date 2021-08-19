@@ -12,7 +12,7 @@ VulkanPipelineLayout::VulkanPipelineLayout(VulkanDevice& in_device,
 	const uint32_t in_descriptor_type_mask) : device(in_device), pipeline_layout(in_pipeline_layout),
 	set_layouts(in_set_layouts), descriptor_type_mask(in_descriptor_type_mask)
 {
-
+	memset(allocator_indices.data(), 0, sizeof(size_t) * allocator_indices.size());
 }
 
 VulkanPipelineLayout::~VulkanPipelineLayout()

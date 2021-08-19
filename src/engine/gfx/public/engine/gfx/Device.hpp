@@ -16,6 +16,7 @@
 #include "Sampler.hpp"
 #include "Sync.hpp"
 #include "Rect.hpp"
+#include "BackendDevice.hpp"
 #include <thread>
 #include <robin_hood.h>
 
@@ -351,6 +352,20 @@ struct BufferInfo : public DeviceResourceInfo<BufferInfo>
 			MemoryUsage::CpuToGpu, 
 			BufferUsageFlags(BufferUsageFlagBits::UniformBuffer)));
 	}
+
+	static BufferInfo make_vertex_buffer_cpu_visible(const size_t in_size)
+	{
+		return BufferInfo(BufferCreateInfo(in_size, 
+			MemoryUsage::CpuToGpu, 
+			BufferUsageFlags(BufferUsageFlagBits::VertexBuffer)));
+	}
+
+	static BufferInfo make_index_buffer_cpu_visible(const size_t in_size)
+	{
+		return BufferInfo(BufferCreateInfo(in_size, 
+			MemoryUsage::CpuToGpu, 
+			BufferUsageFlags(BufferUsageFlagBits::IndexBuffer)));
+	}
 };
 
 struct TextureInfo : public DeviceResourceInfo<TextureInfo>
@@ -456,6 +471,11 @@ struct ShaderInfo : public DeviceResourceInfo<ShaderInfo>
 	ShaderCreateInfo create_info;
 
 	ShaderInfo(const ShaderCreateInfo& in_create_info) : create_info(in_create_info) {}
+
+	static ShaderInfo make(const std::span<uint32_t>& in_bytecode)
+	{
+		return ShaderInfo(ShaderCreateInfo(in_bytecode));
+	}
 };
 
 struct FenceInfo : public DeviceResourceInfo<FenceInfo>
@@ -485,7 +505,7 @@ struct SamplerInfo : public DeviceResourceInfo<SamplerInfo>
 {
 	SamplerCreateInfo create_info;
 
-	SamplerInfo(const SamplerCreateInfo& in_create_info) : create_info(in_create_info) {}
+	SamplerInfo(const SamplerCreateInfo& in_create_info = {}) : create_info(in_create_info) {}
 };
 
 /**
@@ -686,6 +706,7 @@ public:
 	void cmd_bind_pipeline_layout(const CommandListHandle& in_cmd_list, const PipelineLayoutHandle& in_handle);
 	void cmd_set_render_pass_state(const CommandListHandle& in_cmd_list, const PipelineRenderPassState& in_state);
 	void cmd_set_material_state(const CommandListHandle& in_cmd_list, const PipelineMaterialState& in_state);
+	void cmd_set_scissor(const CommandListHandle& in_cmd_list, const Rect2D& in_scissor);
 
 	/** Descriptor management */
 	void cmd_bind_ubo(const CommandListHandle& in_cmd_list, const uint32_t in_set, const uint32_t in_binding, 
@@ -809,6 +830,11 @@ struct UniqueDeviceResource
 	[[nodiscard]] HandleType operator*() const
 	{
 		return handle;
+	}
+
+	[[nodiscard]] operator bool() const
+	{
+		return is_valid();
 	}
 
 	[[nodiscard]] bool is_valid() const

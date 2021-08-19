@@ -36,7 +36,6 @@ private:
 	std::vector<VkDescriptorSetLayout> set_layouts;
 	uint32_t descriptor_type_mask;
 	std::array<size_t, max_descriptor_sets> allocator_indices;
-	std::array<VulkanDescriptorSetAllocator*, max_descriptor_sets> allocators;
 };
 
 inline VkDescriptorType convert_descriptor_type(const DescriptorType& in_type)

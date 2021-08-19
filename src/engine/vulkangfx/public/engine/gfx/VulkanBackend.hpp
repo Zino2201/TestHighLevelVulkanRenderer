@@ -14,7 +14,7 @@ class VulkanBackend final : public Backend
 public:
 	VulkanBackend(const BackendFlags& in_flags);
 	~VulkanBackend();
-	
+
 	cb::Result<std::unique_ptr<BackendDevice>, std::string> create_device(ShaderModel in_requested_shader_model) override;
 
 	[[nodiscard]] bool is_initialized() const

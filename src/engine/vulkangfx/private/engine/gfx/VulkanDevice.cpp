@@ -805,7 +805,6 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::create_pipeline_layout(c
 		size_t allocator_idx = descriptor_set_allocators.emplace(*this,
 			*layout_object,
 			set_layout);
-		layout_object->allocators[idx] = &descriptor_set_allocators[allocator_idx];
 		layout_object->allocator_indices[idx] = allocator_idx;
 		idx++;
 	}
@@ -869,8 +868,8 @@ cb::Result<BackendDeviceResource, Result> VulkanDevice::allocate_descriptor_set(
 	const uint32_t in_set,
 	const std::span<Descriptor, max_bindings>& in_descriptors)
 {
-	return make_result(reinterpret_cast<BackendDeviceResource>(
-		get_resource<VulkanPipelineLayout>(in_pipeline_layout)->allocators[in_set]->allocate(in_descriptors)));
+	auto& set_allocator = descriptor_set_allocators[get_resource<VulkanPipelineLayout>(in_pipeline_layout)->allocator_indices[in_set]];
+	return make_result(reinterpret_cast<BackendDeviceResource>(set_allocator.allocate(in_descriptors)));
 }
 
 void VulkanDevice::destroy_buffer(const BackendDeviceResource& in_buffer)
